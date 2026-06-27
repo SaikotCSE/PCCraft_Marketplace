@@ -52,15 +52,24 @@ class FileMimeTypeValidator:
             )
 
 
-_BD_MOBILE = re.compile(r"^\+?880?1[3-9]\d{8}$")
+_BD_MOBILE = re.compile(r"^(?:\+?880|0)1[3-9]\d{8}$")
 
 
 @deconstructible
 class BDPhoneValidator:
-    """Bangladesh mobile number validator (E.164 or local 01xxxxxxxxx)."""
+    """Bangladesh mobile number validator.
+
+    Accepts the local 11-digit form (``01XXXXXXXXX``) as well as the
+    international 13-digit form with or without a leading ``+``
+    (``+8801XXXXXXXXX`` / ``8801XXXXXXXXX``). The ``0`` separator between
+    the country code and the subscriber number is mandatory in all cases.
+    """
 
     code = "invalid_phone"
-    message = "Enter a valid Bangladesh mobile number (e.g. +8801XXXXXXXXX)."
+    message = (
+        "Enter a valid Bangladesh mobile number "
+        "(e.g. 01XXXXXXXXX or +8801XXXXXXXXX)."
+    )
 
     def __call__(self, value: str) -> None:
         if not value or not _BD_MOBILE.match(value):

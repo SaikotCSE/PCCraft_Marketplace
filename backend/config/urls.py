@@ -14,6 +14,8 @@ from drf_spectacular.views import (
     SpectacularSwaggerView,
 )
 
+from apps.products import urls as products_urls
+
 api_v1_patterns = [
     path("common/", include(("apps.common.urls", "common"), namespace="common")),
     path("accounts/", include(("apps.accounts.urls", "accounts"), namespace="accounts")),
@@ -23,6 +25,10 @@ api_v1_patterns = [
     path("categories/", include(("apps.categories.urls", "categories"), namespace="categories")),
     path("brands/", include(("apps.brands.urls", "brands"), namespace="brands")),
     path("products/", include(("apps.products.urls", "products"), namespace="products")),
+    # The vendor router lives inside apps/products/urls.py under a
+    # "vendor/" sub-prefix. Expose it at the project root so the spec's
+    # /api/v1/vendor/products/* URLs resolve cleanly.
+    path("vendor/", include((products_urls.vendor_router.urls, "vendor-products"), namespace="vendor-products")),
     path("cart/", include(("apps.cart.urls", "cart"), namespace="cart")),
     path("wishlist/", include(("apps.wishlist.urls", "wishlist"), namespace="wishlist")),
     path("orders/", include(("apps.orders.urls", "orders"), namespace="orders")),
