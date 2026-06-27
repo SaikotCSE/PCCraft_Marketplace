@@ -79,3 +79,6 @@ docs/.doctrees/
 # ── Tooling artefacts that should never be tracked ──
 .puku/
 .vite/
+
+# ── dev.sh runtime artefacts (logs + pid files) ──
+scripts/.runtime/
