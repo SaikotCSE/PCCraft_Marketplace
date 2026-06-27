@@ -1,0 +1,15 @@
+Django>=6.0,<7
+djangorestframework
+djangorestframework-simplejwt
+django-cors-headers
+Pillow
+django-filter
+drf-spectacular[sidecar]
+drf-spectacular-sidecar
+celery[redis]
+redis
+django-storages[boto3]
+python-decouple
+python-magic
+psycopg2-binary
+gunicorn

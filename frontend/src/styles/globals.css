@@ -1,0 +1,70 @@
+/* ──────────────────────────────────────────────────────────────
+   PCCraft Marketplace — global styles
+   Tailwind v4 CSS-first configuration (see PCCraft_Master_Spec_v4.md §1.2).
+   There is intentionally no tailwind.config.js; tokens live here.
+   ────────────────────────────────────────────────────────────── */
+
+@import "tailwindcss";
+
+@theme {
+  /* Chrome palette — sidebar, navbar, structural elements */
+  --color-primary-900: #0F172A;   /* Sidebar background */
+  --color-primary-800: #1E293B;   /* Navbar / top bar */
+  --color-primary-700: #334155;   /* Active nav items, chrome hover states */
+
+  /* Surface palette — page content, cards, inputs */
+  --color-surface-50:  #FFFFFF;   /* Cards, modals, form panels */
+  --color-surface-100: #F8FAFC;   /* Page / app background */
+  --color-surface-200: #F1F5F9;   /* Input backgrounds, alternating rows */
+  --color-surface-300: #E2E8F0;   /* Borders, dividers */
+
+  /* Accent / Action palette */
+  --color-accent-500: #6366F1;    /* Primary CTA, links, focus rings */
+  --color-accent-400: #818CF8;    /* Hover on accent */
+  --color-accent-300: #A5B4FC;    /* Disabled accent, subtle highlights */
+
+  /* Text tokens */
+  --color-text-primary:   #0F172A; /* Main text on light surfaces */
+  --color-text-secondary: #64748B; /* Subtext, placeholders on light surfaces */
+  --color-text-inverse:   #F1F5F9; /* Text on dark chrome (sidebar, navbar) */
+
+  /* Semantic */
+  --color-success: #22C55E;
+  --color-warning: #F59E0B;
+  --color-danger:  #EF4444;
+  --color-info:    #38BDF8;
+
+  /* Typography */
+  --font-sans:    "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Base: light background, dark text on all content.
+   Single light theme — no dark-mode toggle (see §1.2 design rules). */
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-surface-100);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+  color: var(--color-text-primary);
+}
+
+/* Reusable utility for focus rings driven by the accent color. */
+@layer components {
+  .focus-ring {
+    @apply outline-none ring-2 ring-transparent ring-offset-2 ring-offset-surface-100
+           focus-visible:ring-accent-500 transition-all duration-200 ease-in-out;
+  }
+}

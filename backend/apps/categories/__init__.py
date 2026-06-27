@@ -1,0 +1,1 @@
+"""Categories -- full model in Module 2."""

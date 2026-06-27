@@ -1,0 +1,81 @@
+# ───────────────────────────────────────────────────────────────
+# PCCraft Marketplace — root .gitignore
+# ───────────────────────────────────────────────────────────────
+
+# ── OS / editor noise ──
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.code-workspace
+.history/
+.conda-meta/
+
+# ── Python / Django ──
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.installed.cfg
+*.egg
+.pyc
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+celerybeat-schedule
+celerybeat-schedule.db
+
+# ── Virtual envs ──
+venv/
+env/
+ENV/
+.venv/
+
+# ── Local config / secrets (NEVER commit real .env files;
+#    .env.example is intentionally tracked as the safe template) ──
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env
+frontend/.env.local
+backend/local_settings.py
+!.env.example
+
+# ── Django runtime artifacts ──
+backend/staticfiles/
+backend/media/
+backend/logs/
+backend/*.log
+
+# ── Node / frontend ──
+node_modules/
+.pnpm-store/
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/.vite/
+frontend/coverage/
+frontend/*.log
+
+# ── Testing / docs artifacts ──
+docs/_build/
+docs/.doctrees/
+*.pytest_cache
+.cache/
+.parcel-cache/
+.next/
+.nuxt/
+
+# ── Tooling artefacts that should never be tracked ──
+.puku/
+.vite/

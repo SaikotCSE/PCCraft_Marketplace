@@ -1,0 +1,1 @@
+"""Products -- full catalog in Module 3."""

@@ -1,0 +1,475 @@
+"""Auth serializers — full implementations per spec §Module 1.
+
+Serializers
+-----------
+* ``CustomerRegisterSerializer``  -- validates phone regex, password match,
+  age ≥ 13 if DOB provided. Used by ``CustomerRegisterView``.
+* ``VendorRegisterSerializer``    -- validates document MIME types using
+  ``FileMimeTypeValidator`` (already on the model fields, this serializer
+  adds cross-field + business-address structure checks).
+* ``LoginSerializer``             -- email + password + role. Delegates to
+  ``rest_framework_simplejwt.serializers.TokenObtainPairSerializer`` so
+  the same JWT minting flow is reused for the SIMPLE_JWT
+  ``/api/v1/auth/token/refresh/`` endpoint.
+* ``UserProfileSerializer``       -- readable + writable fields for
+  profile update (name, phone, DOB, gender, avatar).
+* ``VendorProfileSerializer``     -- includes ``status`` (read-only),
+  rejection reason (read-only), and store fields (read-write). Linked to
+  via ``ProfileView`` for vendors.
+* ``TokenResponseSerializer``     -- wraps ``{access, refresh, user}`` so
+  the response shape matches what the frontend's ``useAuthStore`` reads.
+"""
+from __future__ import annotations
+
+from datetime import date, timedelta
+
+from django.contrib.auth import authenticate, get_user_model
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.utils.translation import gettext_lazy as _
+
+from rest_framework import serializers
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.tokens import RefreshToken
+
+from apps.accounts.models import (
+    BusinessType,
+    CustomerProfile,
+    CustomUser,
+    Gender,
+    UserRole,
+    VendorProfile,
+    VendorStatus,
+)
+from apps.common.validators import BDPhoneValidator
+
+User = get_user_model()
+
+
+# ====================================================================
+# Shared helpers
+# ====================================================================
+def _validate_age_13(dob: date | None) -> None:
+    """Raise ``serializers.ValidationError`` if the DOB implies age < 13."""
+    if dob is None:
+        return
+    today = date.today()
+    thirteen = today - timedelta(days=13 * 365 + 4)  # leap-year buffer
+    if dob > thirteen:
+        raise serializers.ValidationError(
+            _("You must be at least 13 years old to register."),
+            code="underage",
+        )
+    if dob > today:
+        raise serializers.ValidationError(
+            _("Date of birth cannot be in the future."),
+            code="future_dob",
+        )
+
+
+# ====================================================================
+# Login
+# ====================================================================
+class LoginSerializer(TokenObtainPairSerializer):
+    """Email + password + role. Roles are validated here so the service
+    layer never sees an invalid role string.
+    """
+
+    role = serializers.ChoiceField(
+        choices=[r.value for r in UserRole],
+        required=True,
+    )
+
+    default_error_messages = {
+        **TokenObtainPairSerializer.default_error_messages,
+        "role_mismatch": "This account does not have the selected role.",
+    }
+
+    def _authenticate_user(self, username, password):
+        """Override the parent's USERNAME_FIELD-based authenticate so we
+        accept email. Returns the user or raises ``AuthenticationFailed``.
+        """
+        if not username or not password:
+            self.fail("no_active_account")
+        user = authenticate(
+            request=self.context.get("request"),
+            username=username,
+            password=password,
+        )
+        if user is None or not user.is_active:
+            self.fail("no_active_account")
+        return user
+
+    def validate(self, attrs):
+        # ``attrs`` already has ``email`` (from the parent's ``username_field``)
+        # and ``password``. We add ``role`` (declared above) and
+        # re-implement the parent's credential check to inject role-gating.
+        request = self.context.get("request")
+        authenticate_kwargs = {
+            getattr(self, "username_field", "email"): attrs[self.username_field],
+            "password": attrs["password"],
+        }
+        try:
+            authenticate_kwargs["request"] = request
+        except Exception:
+            pass
+        self.user = self._authenticate_user(
+            attrs[self.username_field], attrs["password"]
+        )
+        if not self.user.role or self.user.role.lower() != attrs["role"].lower():
+            self.fail("role_mismatch")
+        refresh = self.get_token(self.user)
+        return {"access": str(refresh.access_token), "refresh": str(refresh)}
+
+    @classmethod
+    def get_token(cls, user):
+        token = super().get_token(user)
+        token["role"] = getattr(user, "role", None)
+        token["full_name"] = getattr(user, "full_name", "")
+        token["is_verified"] = getattr(user, "is_verified", False)
+        return token
+
+
+# ====================================================================
+# Customer registration
+# ====================================================================
+class CustomerRegisterSerializer(serializers.Serializer):
+    """Customer sign-up body.
+
+    Mirrors the spec's customer registration field list (full_name,
+    email, phone, password, confirm_password, date_of_birth, gender,
+    avatar, accept_terms).
+    """
+
+    full_name = serializers.CharField(max_length=150, trim_whitespace=True)
+    email = serializers.EmailField()
+    phone = serializers.CharField(
+        max_length=20,
+        validators=[BDPhoneValidator()],
+    )
+    password = serializers.CharField(write_only=True, trim_whitespace=False, min_length=8)
+    confirm_password = serializers.CharField(write_only=True, trim_whitespace=False)
+    date_of_birth = serializers.DateField(required=False, allow_null=True)
+    gender = serializers.ChoiceField(
+        choices=Gender.choices,
+        required=False,
+        allow_blank=True,
+        default="",
+    )
+    avatar = serializers.ImageField(required=False, allow_null=True)
+    accept_terms = serializers.BooleanField()
+
+    def validate_email(self, value: str) -> str:
+        email = value.strip().lower()
+        if User.objects.filter(email__iexact=email).exists():
+            raise serializers.ValidationError(
+                "An account with this email already exists.",
+                code="email_taken",
+            )
+        return email
+
+    def validate_password(self, value: str) -> str:
+        # Reuse Django's auth validators (min length, common password,
+        # similarity, numeric-only). Raises ``ValidationError`` on failure.
+        try:
+            validate_password(value)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(
+                list(exc.messages),
+                code="weak_password",
+            ) from exc
+        return value
+
+    def validate_date_of_birth(self, value: date | None) -> date | None:
+        _validate_age_13(value)
+        return value
+
+    def validate_accept_terms(self, value: bool) -> bool:
+        if not value:
+            raise serializers.ValidationError(
+                "You must accept the terms to continue.",
+                code="terms_not_accepted",
+            )
+        return value
+
+    def validate(self, attrs):
+        if attrs["password"] != attrs["confirm_password"]:
+            raise serializers.ValidationError(
+                {"confirm_password": "Passwords do not match."},
+                code="password_mismatch",
+            )
+        return attrs
+
+
+# ====================================================================
+# Vendor registration
+# ====================================================================
+class _BusinessAddressSerializer(serializers.Serializer):
+    """Bangladesh-style business address -- used as a nested field on
+    ``VendorRegisterSerializer``. JSON callers send a real nested object;
+    multipart callers send a JSON-encoded string in the same field. The
+    JSON-string decode happens in the parent's ``to_internal_value`` so the
+    nested serializer's contract stays simple."""
+
+    street = serializers.CharField(max_length=255)
+    city = serializers.CharField(max_length=80)
+    district = serializers.CharField(max_length=80)
+    postal_code = serializers.CharField(max_length=20, required=False, allow_blank=True, default="")
+
+
+class VendorRegisterSerializer(serializers.Serializer):
+    """Vendor sign-up body -- all 4 steps collapsed for the API call.
+
+    Multipart upload: ``trade_license_doc`` and ``nid_doc`` are required
+    file fields. MIME-type validation happens at the model layer via
+    ``FileMimeTypeValidator`` (set in ``models.py``).
+    """
+
+    # ---- step 1: personal ----
+    owner_name = serializers.CharField(max_length=150, trim_whitespace=True)
+    email = serializers.EmailField()
+    phone = serializers.CharField(
+        max_length=20,
+        validators=[BDPhoneValidator()],
+    )
+    password = serializers.CharField(write_only=True, trim_whitespace=False, min_length=8)
+    confirm_password = serializers.CharField(write_only=True, trim_whitespace=False)
+
+    # ---- step 2: business ----
+    business_name = serializers.CharField(max_length=180, trim_whitespace=True)
+    business_type = serializers.ChoiceField(
+        choices=BusinessType.choices,
+        default=BusinessType.SOLE_PROP,
+    )
+    business_phone = serializers.CharField(
+        max_length=20,
+        required=False,
+        allow_blank=True,
+        validators=[BDPhoneValidator()],
+    )
+    trade_license_number = serializers.CharField(max_length=80)
+    business_address = _BusinessAddressSerializer()
+
+    # ---- step 3: documents ----
+    trade_license_doc = serializers.FileField()
+    nid_number = serializers.CharField(max_length=40)
+    nid_doc = serializers.FileField()
+
+    # ---- storefront ----
+    store_name = serializers.CharField(max_length=120, required=False, allow_blank=True)
+    store_description = serializers.CharField(required=False, allow_blank=True)
+    store_contact_email = serializers.EmailField(required=False, allow_blank=True)
+    vendor_return_policy = serializers.CharField(required=False, allow_blank=True)
+    low_stock_threshold = serializers.IntegerField(
+        required=False, min_value=1, max_value=32767, default=5,
+    )
+
+    # ---- step 4: consent ----
+    accept_vendor_terms = serializers.BooleanField()
+
+    def to_internal_value(self, data):
+        """Decode the JSON-string ``business_address`` field posted by
+        multipart clients. JSON callers send a real nested object, so the
+        override is a no-op for them. We mutate a shallow copy of ``data``
+        so the original (DRF QueryDict for multipart) is preserved.
+        """
+        import json as _json
+
+        if hasattr(data, "getlist"):
+            # ``QueryDict`` -- read the raw string value.
+            raw = data.get("business_address")
+        elif isinstance(data, dict):
+            raw = data.get("business_address")
+        else:
+            raw = None
+
+        if isinstance(raw, str) and raw:
+            try:
+                parsed = _json.loads(raw)
+            except _json.JSONDecodeError as exc:
+                raise serializers.ValidationError(
+                    {"business_address": "Must be a JSON object."},
+                    code="invalid",
+                ) from exc
+            if not isinstance(parsed, dict):
+                raise serializers.ValidationError(
+                    {"business_address": "Must be a JSON object."},
+                    code="invalid",
+                )
+            # Build a mutable dict the parent can consume.
+            if hasattr(data, "getlist"):
+                # ``QueryDict``: copy via dict() then assign.
+                new_data = {k: data.get(k) for k in data.keys()}
+            else:
+                new_data = dict(data) if isinstance(data, dict) else dict(data)
+            new_data["business_address"] = parsed
+            data = new_data
+        return super().to_internal_value(data)
+
+    def validate_email(self, value: str) -> str:
+        email = value.strip().lower()
+        if User.objects.filter(email__iexact=email).exists():
+            raise serializers.ValidationError(
+                "An account with this email already exists.",
+                code="email_taken",
+            )
+        return email
+
+    def validate_password(self, value: str) -> str:
+        try:
+            validate_password(value)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(
+                list(exc.messages),
+                code="weak_password",
+            ) from exc
+        return value
+
+    def validate_accept_vendor_terms(self, value: bool) -> bool:
+        if not value:
+            raise serializers.ValidationError(
+                "You must accept the vendor terms to continue.",
+                code="vendor_terms_not_accepted",
+            )
+        return value
+
+    def validate(self, attrs):
+        if attrs["password"] != attrs["confirm_password"]:
+            raise serializers.ValidationError(
+                {"confirm_password": "Passwords do not match."},
+                code="password_mismatch",
+            )
+        # Default store_name to business_name if blank so the slug-gen
+        # in VendorProfile.save() has something to work with.
+        if not attrs.get("store_name"):
+            attrs["store_name"] = attrs["business_name"]
+        return attrs
+
+
+# ====================================================================
+# Profile (GET / PATCH /api/v1/auth/profile/)
+# ====================================================================
+class UserProfileSerializer(serializers.ModelSerializer):
+    """Customer-facing profile serializer (used for PATCH and read)."""
+
+    class Meta:
+        model = CustomUser
+        fields = (
+            "id",
+            "email",
+            "full_name",
+            "phone",
+            "role",
+            "date_of_birth",
+            "gender",
+            "avatar",
+            "is_active",
+            "date_joined",
+        )
+        read_only_fields = ("id", "email", "role", "is_active", "date_joined")
+
+    def validate_phone(self, value: str) -> str:
+        if not value:
+            return value
+        BDPhoneValidator()(value)
+        return value
+
+    def validate_date_of_birth(self, value):
+        _validate_age_13(value)
+        return value
+
+
+# ====================================================================
+# Vendor profile (GET / PATCH store fields)
+# ====================================================================
+class VendorProfileSerializer(serializers.ModelSerializer):
+    """Vendor-facing profile serializer.
+
+    ``status`` and ``rejection_reason`` are read-only -- staff change
+    them via the admin queue, not via the API.
+    """
+
+    business_address = serializers.JSONField()
+
+    class Meta:
+        model = VendorProfile
+        fields = (
+            "id",
+            "business_name",
+            "owner_name",
+            "business_type",
+            "business_phone",
+            "trade_license_number",
+            "business_address",
+            "status",
+            "rejection_reason",
+            "store_name",
+            "store_slug",
+            "store_description",
+            "store_contact_email",
+            "store_logo",
+            "store_banner",
+            "vendor_return_policy",
+            "low_stock_threshold",
+            "approved_at",
+        )
+        read_only_fields = (
+            "id",
+            "status",
+            "rejection_reason",
+            "store_slug",
+            "approved_at",
+        )
+
+
+# ====================================================================
+# Token response
+# ====================================================================
+class TokenResponseSerializer(serializers.Serializer):
+    """{access, refresh, user} -- what the login view returns.
+
+    Lives here so the OpenAPI schema documents the shape; views build
+    the payload via :func:`AuthService.issue_tokens` + the
+    ``UserProfileSerializer``.
+    """
+
+    access = serializers.CharField(read_only=True)
+    refresh = serializers.CharField(read_only=True)
+    user = UserProfileSerializer(read_only=True)
+
+
+# ====================================================================
+# Vendor document resubmission (PATCH /api/v1/auth/vendor/documents/)
+# ====================================================================
+class VendorDocumentUploadSerializer(serializers.Serializer):
+    """Resubmit KYC documents after INFO_REQUESTED / REJECTED."""
+
+    trade_license_doc = serializers.FileField(required=False)
+    nid_doc = serializers.FileField(required=False)
+
+    def validate(self, attrs):
+        if not attrs.get("trade_license_doc") and not attrs.get("nid_doc"):
+            raise serializers.ValidationError(
+                "Provide at least one document (trade license or NID).",
+                code="no_documents",
+            )
+        return attrs
+
+
+# ====================================================================
+# SimpleJWT re-export — referenced from ``settings/base.py``:
+#   ``SIMPLE_JWT['TOKEN_OBTAIN_SERIALIZER'] = 'apps.accounts.serializers.JWTClaimsSerializer'``
+# so the standard ``/api/v1/auth/token/refresh/`` endpoint keeps the
+# custom ``role`` / ``full_name`` claims in the issued access token.
+# ====================================================================
+class JWTClaimsSerializer(TokenObtainPairSerializer):
+    """SimpleJWT serializer that decorates the access token with our
+    custom claims. Used by the built-in ``/token/refresh/`` endpoint."""
+
+    @classmethod
+    def get_token(cls, user):
+        token = super().get_token(user)
+        token["role"] = getattr(user, "role", None)
+        token["full_name"] = getattr(user, "full_name", "")
+        token["is_verified"] = getattr(user, "is_verified", False)
+        return token
