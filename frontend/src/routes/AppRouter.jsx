@@ -35,6 +35,8 @@ const BrandsPage = lazy(() => import('@pages/Categories/BrandsPage'));
 const BrandDetailPage = lazy(() => import('@pages/Categories/BrandDetailPage'));
 const SearchPage = lazy(() => import('@pages/Search/SearchPage'));
 const PCBuilderPage = lazy(() => import('@pages/PCBuilder/PCBuilderPage'));
+const MyBuildsPage = lazy(() => import('@pages/MyBuilds/MyBuildsPage'));
+const SharedBuildPage = lazy(() => import('@pages/SharedBuild/SharedBuildPage'));
 
 const CartPage = lazy(() => import('@pages/Cart/CartPage'));
 const WishlistPage = lazy(() => import('@pages/Wishlist/WishlistPage'));
@@ -96,6 +98,7 @@ export const router = createBrowserRouter([
       { path: ROUTE_PATHS.BRAND_DETAIL, element: withSuspense(BrandDetailPage) },
       { path: ROUTE_PATHS.SEARCH, element: withSuspense(SearchPage) },
       { path: ROUTE_PATHS.PC_BUILDER, element: withSuspense(PCBuilderPage) },
+      { path: ROUTE_PATHS.SHARED_BUILD, element: withSuspense(SharedBuildPage) },
 
       { path: ROUTE_PATHS.CART, element: withSuspense(CartPage) },
       { path: ROUTE_PATHS.WISHLIST, element: withSuspense(WishlistPage) },
@@ -110,6 +113,7 @@ export const router = createBrowserRouter([
           { path: ROUTE_PATHS.RETURNS, element: withSuspense(ReturnsPage) },
           { path: ROUTE_PATHS.RETURN_DETAIL, element: withSuspense(ReturnStatusPage) },
           { path: ROUTE_PATHS.PROFILE, element: withSuspense(ProfilePage) },
+          { path: ROUTE_PATHS.MY_BUILDS, element: withSuspense(MyBuildsPage) },
         ],
       },
 

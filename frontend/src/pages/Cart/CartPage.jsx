@@ -16,6 +16,8 @@ import CartItem from '@components/cart/CartItem';
 import CartSummary from '@components/cart/CartSummary';
 import Skeleton from '@components/common/Skeleton';
 import EmptyState from '@components/common/EmptyState';
+import RecommendationCarousel from '@components/recommendation/RecommendationCarousel';
+import { recommendationService } from '@services/recommendationService';
 import { paths } from '@routes/routePaths';
 
 const CartPage = () => {
@@ -115,6 +117,11 @@ const CartPage = () => {
           {items.length > 0 && <CartSummary />}
         </div>
       </div>
+
+      <RecommendationCarousel
+        title="You Might Also Need"
+        fetchFn={() => recommendationService.getTrending({ limit: 10 })}
+      />
     </section>
   );
 };

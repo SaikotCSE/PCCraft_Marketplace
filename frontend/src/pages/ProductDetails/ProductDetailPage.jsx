@@ -1,6 +1,11 @@
 // ProductDetailPage — gallery, price, stock, specs, reviews (Module 6), add-to-cart.
 // Spec §2.7.
-import { useState } from 'react';
+//
+// Module 7 additions:
+//   - debounced trackView(slug) call 500ms after slug change
+//   - Similar Products carousel
+//   - Frequently Bought Together carousel
+import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Heart, ShoppingCart, Minus, Plus, Store, Shield } from 'lucide-react';
@@ -12,8 +17,11 @@ import PriceDisplay from '@/components/products/PriceDisplay';
 import StockBadge from '@/components/products/StockBadge';
 import ProductSpecsTable from '@/components/products/ProductSpecsTable';
 import ReviewsList from '@/components/reviews/ReviewsList';
+import RecommendationCarousel from '@components/recommendation/RecommendationCarousel';
 import { productService } from '@/services/productService';
+import { recommendationService } from '@services/recommendationService';
 import { formatPrice } from '@/utils/formatters';
+import { getSessionKey } from '@utils/sessionKey';
 
 const ProductDetailPage = () => {
   const { slug } = useParams();
@@ -28,6 +36,20 @@ const ProductDetailPage = () => {
 
   const [qty, setQty] = useState(1);
   const [tab, setTab] = useState('specs');
+
+  // Module 7: debounced trackView(slug) — 500ms after slug change.
+  // 500ms is enough to absorb React StrictMode's intentional double-mount
+  // while still firing the view event before the user navigates away.
+  useEffect(() => {
+    if (!slug) return undefined;
+    const sessionKey = getSessionKey();
+    const timer = setTimeout(() => {
+      recommendationService.trackView(slug, { sessionKey }).catch(() => {
+        // Tracking failures are non-critical; do not surface to the user.
+      });
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [slug]);
 
   if (isLoading) {
     return (
@@ -235,6 +257,20 @@ const ProductDetailPage = () => {
           </p>
         )}
       </div>
+
+      {/* Module 7 — recommendation carousels. Both are scoped to the
+          current product's slug; they hydrate independently so a failure
+          in one does not block the other. */}
+      <RecommendationCarousel
+        title="Similar Products"
+        fetchFn={() => recommendationService.getSimilar(slug, { limit: 10 })}
+      />
+      <RecommendationCarousel
+        title="Frequently Bought Together"
+        fetchFn={() =>
+          recommendationService.getFrequentlyBoughtTogether(slug, { limit: 10 })
+        }
+      />
     </div>
   );
 };

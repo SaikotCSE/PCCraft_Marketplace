@@ -78,10 +78,10 @@ docs/.doctrees/
 
 # ── Tooling artefacts that should never be tracked ──
 .puku/
-.vite/
 
-
-
-
+# ── Repo-level docs are intentionally NOT tracked ──
 CLAUDE.md
 PCCraft_Master_Spec_v4.md
+puku.md
+README.md
+LICENSE

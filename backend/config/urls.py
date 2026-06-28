@@ -17,6 +17,7 @@ from drf_spectacular.views import (
 from apps.products import urls as products_urls
 from apps.orders import urls as apps_orders_urls
 from apps.reviews import urls as apps_reviews_urls
+from apps.compatibility import urls as compatibility_urls
 
 api_v1_patterns = [
     path("common/", include(("apps.common.urls", "common"), namespace="common")),
@@ -60,6 +61,15 @@ api_v1_patterns = [
     path("admin/reviews/", include((apps_reviews_urls.admin_urlpatterns, "admin-reviews"), namespace="admin-reviews")),
     path("recommendations/", include(("apps.recommendations.urls", "recommendations"), namespace="recommendations")),
     path("compatibility/", include(("apps.compatibility.urls", "compatibility"), namespace="compatibility")),
+    # Spec §2.10: "On login: auto-POST to /api/v1/builds/". Mount only
+    # the build-CRUD subset (build_urlpatterns) here so the alias path
+    # resolves to /api/v1/builds/, /api/v1/builds/<id>/, and
+    # /api/v1/builds/share/<token>/. The rules / check / products
+    # routes stay under /api/v1/compatibility/.
+    path(
+        "builds/",
+        include((compatibility_urls.build_urlpatterns, "builds"), namespace="builds"),
+    ),
     path("dashboard/", include(("apps.dashboard.urls", "dashboard"), namespace="dashboard")),
 ]
 

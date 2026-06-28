@@ -27,6 +27,8 @@ export const ROUTE_PATHS = Object.freeze({
   BRAND_DETAIL: '/brands/:slug',
   SEARCH: '/search',
   PC_BUILDER: '/pc-builder',
+  MY_BUILDS: '/builds',
+  SHARED_BUILD: '/builds/share/:token',
 
   // ----- cart + wishlist (anonymous-readable) -----
   CART: '/cart',
@@ -88,6 +90,8 @@ export const paths = {
 
   search: () => ROUTE_PATHS.SEARCH,
   pcBuilder: () => ROUTE_PATHS.PC_BUILDER,
+  myBuilds: () => ROUTE_PATHS.MY_BUILDS,
+  sharedBuild: (token) => buildPath(ROUTE_PATHS.SHARED_BUILD, { token }),
   cart: () => ROUTE_PATHS.CART,
   wishlist: () => ROUTE_PATHS.WISHLIST,
 
@@ -121,6 +125,11 @@ export const paths = {
 // router wiring and the in-page navigation never drift.
 export const ROUTES = Object.freeze({
   HOME: ROUTE_PATHS.HOME,
+  BUILDER: Object.freeze({
+    INDEX: ROUTE_PATHS.PC_BUILDER,
+    MY_BUILDS: ROUTE_PATHS.MY_BUILDS,
+    SHARED_BUILD: ROUTE_PATHS.SHARED_BUILD,
+  }),
   AUTH: Object.freeze({
     LOGIN: ROUTE_PATHS.LOGIN,
     REGISTER: ROUTE_PATHS.REGISTER,

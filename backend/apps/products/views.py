@@ -131,6 +131,23 @@ class PublicProductListView(viewsets.ReadOnlyModelViewSet):
         data = ProductListSerializer(qs, many=True, context={"request": request}).data
         return api_response(data=data, status=status.HTTP_200_OK)
 
+    @action(detail=True, methods=("post",), url_path="track-view")
+    def track_view(self, request: Request, slug: str | None = None) -> Response:
+        """Record a product-view event for the recommendations engine.
+
+        Spec §7.3: ``POST /api/v1/products/{slug}/track-view/``. Accepts
+        anonymous viewers -- the frontend supplies an ``X-Session-Key``
+        header for session attribution when the user is not logged in.
+        """
+        from apps.recommendations.views import track_view_for_product
+
+        return track_view_for_product(
+            request,
+            slug=slug or self.kwargs.get("slug", ""),
+            session_key=request.headers.get("X-Session-Key", ""),
+            ip_address=request.META.get("REMOTE_ADDR", "") or "",
+        )
+
 
 # ====================================================================
 # Vendor catalog

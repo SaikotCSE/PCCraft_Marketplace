@@ -18,6 +18,8 @@ import CartItem from '@components/cart/CartItem';
 import CartSummary from '@components/cart/CartSummary';
 import Skeleton from '@components/common/Skeleton';
 import EmptyState from '@components/common/EmptyState';
+import RecommendationCarousel from '@components/recommendation/RecommendationCarousel';
+import { recommendationService } from '@services/recommendationService';
 import { paths } from '@routes/routePaths';
 
 const CartDrawer = () => {
@@ -151,6 +153,18 @@ const CartDrawer = () => {
             </Link>
           </div>
         )}
+
+        {/* Module 7 — recommendation strip inside the drawer (compact
+            margin overrides so it sits flush against the panel sides). */}
+        <div className="border-t border-border bg-surface">
+          <div className="-mx-5">
+            <RecommendationCarousel
+              title="You Might Also Need"
+              fetchFn={() => recommendationService.getTrending({ limit: 10 })}
+              hidden={!isAuthenticated}
+            />
+          </div>
+        </div>
       </aside>
     </>
   );

@@ -243,8 +243,30 @@ CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler" if False else None
 
-# Celery beat schedule -- populated in Module 7 when recommendations land.
-CELERY_BEAT_SCHEDULE = {}
+# Celery beat schedule -- Module 7 (recommendations).
+CELERY_BEAT_SCHEDULE = {
+    "warm-trending-cache": {
+        "task": "apps.recommendations.warm_trending_cache",
+        # Every 15 minutes, per spec §7.4.
+        "schedule": 15 * 60,
+    },
+    "warm-co-occurrence-cache": {
+        "task": "apps.recommendations.warm_co_occurrence_cache",
+        # Every 30 minutes -- co-occurrence is cheaper than personalized
+        # but still the second-most expensive feed.
+        "schedule": 30 * 60,
+    },
+    "warm-all-personalized": {
+        "task": "apps.recommendations.warm_all_personalized",
+        # Nightly 03:00 UTC for the top 100 most recent buyers.
+        "schedule": {"hour": 3, "minute": 0},
+    },
+    "purge-stale-product-views": {
+        "task": "apps.recommendations.purge_stale_product_views",
+        # Nightly 04:00 UTC, keep 90 days.
+        "schedule": {"hour": 4, "minute": 0},
+    },
+}
 
 # ─────────────────────────────────────────────────────────────────
 # Storage (S3-compatible) -- placeholder, used only in production
