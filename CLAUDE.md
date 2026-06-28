@@ -10,7 +10,7 @@ it. Do not silently omit behaviour that is.
 The spec defines the modules and their order — follow that order exactly.
 For every module, do all of the following before moving to the next:
 
-1. Re-read the relevant spec section for that module before writing any file.
+1. Re-read the relevant spec section for that module before writing any file and activate the venv using conda activate pccraft.
 2. Build backend and frontend together — do not finish all backend modules first.
 3. Write complete files — no `pass`, no `# TODO`, no `...`, no stub bodies.
    If the spec defines 8 fields on a model, the model has 8 fields.
@@ -22,7 +22,6 @@ For every module, do all of the following before moving to the next:
 7. Run `python manage.py check` — must pass with zero errors after every migration.
 8. Run a smoke test — at minimum one `curl` against a live endpoint or one
    `python manage.py shell -c` import check. If it fails, fix it before proceeding.
-9. Remind me to start a new session because the model needs refresh after each of the 3 module.
 
 ---
 

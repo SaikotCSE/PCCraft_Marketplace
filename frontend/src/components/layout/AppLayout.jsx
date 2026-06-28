@@ -7,6 +7,7 @@ import { Toaster } from 'react-hot-toast';
 
 import Navbar from '@components/layout/Navbar';
 import Footer from '@components/layout/Footer';
+import CartDrawer from '@components/cart/CartDrawer';
 import { useUIStore } from '@context/useUIStore';
 
 const AppLayout = () => {
@@ -54,6 +55,8 @@ const AppLayout = () => {
           },
         }}
       />
+
+      <CartDrawer />
 
       <ScrollRestoration />
     </div>

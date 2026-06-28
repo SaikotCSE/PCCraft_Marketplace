@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('accounts', '0002_default_shipping_address'),
+        ('accounts', '0001_initial'),
         ('brands', '0001_initial'),
         ('categories', '0001_initial'),
         ('products', '0001_initial'),

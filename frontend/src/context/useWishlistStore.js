@@ -83,6 +83,28 @@ export const useWishlistStore = create(
         return get().add(productId);
       },
 
+      /**
+       * Move a wishlist item into the cart. Backend removes the wishlist
+       * row in the same transaction; we refresh both stores so the UI
+       * badges stay in sync.
+       */
+      moveToCart: async (itemId, quantity = 1) => {
+        const snapshot = { items: get().items, productIds: get().productIds };
+        // optimistic: drop the row locally
+        set({
+          items: get().items.filter((i) => i.id !== itemId),
+          productIds: get().productIds.filter((id) => id !== snapshot.items.find((i) => i.id === itemId)?.product?.id),
+        });
+        try {
+          await wishlistService.moveToCart(itemId, quantity);
+          await get().fetch();
+          return true;
+        } catch (err) {
+          set(snapshot);
+          throw err;
+        }
+      },
+
       syncAnonymousToServer: async () => {
         const local = get().productIds;
         if (!local.length) return;

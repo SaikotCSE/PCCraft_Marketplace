@@ -37,6 +37,7 @@ export const ROUTE_PATHS = Object.freeze({
   ORDERS: '/orders',
   ORDER_DETAIL: '/orders/:orderNumber',
   RETURNS: '/returns',
+  RETURN_DETAIL: '/returns/:returnId',
   PROFILE: '/profile',
 
   // ----- vendor -----
@@ -45,6 +46,7 @@ export const ROUTE_PATHS = Object.freeze({
   VENDOR_PRODUCT_NEW: '/vendor/products/new',
   VENDOR_PRODUCT_EDIT: '/vendor/products/:slug/edit',
   VENDOR_ORDERS: '/vendor/orders',
+  VENDOR_RETURNS: '/vendor/returns',
   VENDOR_PROFILE: '/vendor/profile',
   VENDOR_PUBLIC: '/vendors/:storeSlug',
 
@@ -92,6 +94,7 @@ export const paths = {
   orders: () => ROUTE_PATHS.ORDERS,
   orderDetail: (orderNumber) => buildPath(ROUTE_PATHS.ORDER_DETAIL, { orderNumber }),
   returns: () => ROUTE_PATHS.RETURNS,
+  returnDetail: (returnId) => buildPath(ROUTE_PATHS.RETURN_DETAIL, { returnId }),
   profile: () => ROUTE_PATHS.PROFILE,
 
   vendorDashboard: () => ROUTE_PATHS.VENDOR_DASHBOARD,
@@ -99,6 +102,7 @@ export const paths = {
   vendorProductNew: () => ROUTE_PATHS.VENDOR_PRODUCT_NEW,
   vendorProductEdit: (slug) => buildPath(ROUTE_PATHS.VENDOR_PRODUCT_EDIT, { slug }),
   vendorOrders: () => ROUTE_PATHS.VENDOR_ORDERS,
+  vendorReturns: () => ROUTE_PATHS.VENDOR_RETURNS,
   vendorProfile: () => ROUTE_PATHS.VENDOR_PROFILE,
   vendorPublic: (storeSlug) => buildPath(ROUTE_PATHS.VENDOR_PUBLIC, { storeSlug }),
 
@@ -127,6 +131,7 @@ export const ROUTES = Object.freeze({
     DASHBOARD: ROUTE_PATHS.VENDOR_DASHBOARD,
     PRODUCTS: ROUTE_PATHS.VENDOR_PRODUCTS,
     ORDERS: ROUTE_PATHS.VENDOR_ORDERS,
+    RETURNS: ROUTE_PATHS.VENDOR_RETURNS,
     PROFILE: ROUTE_PATHS.VENDOR_PROFILE,
     PENDING: ROUTE_PATHS.VENDOR_PENDING,
   }),

@@ -769,7 +769,7 @@ The login page must show a **role selector** before the credential form appears:
 **Customer Registration Fields:**
 - Full Name (required, min 3 chars)
 - Email (required, unique, valid format)
-- Phone Number (required, regex: `^\+880[0-9]{10}$`)
+- Phone Number (required, regex: `^(?:\+?880|0)1[3-9]\d{8}$` — local `01XXXXXXXXX` 11-digit or international `+8801XXXXXXXXX` / `8801XXXXXXXXX` 13-digit; the `0` / `+880` prefix is mandatory)
 - Password (required, min 8 chars, must contain uppercase + number)
 - Confirm Password (must match)
 - Date of Birth (optional, date picker, must be ≥ 13 years old if provided)

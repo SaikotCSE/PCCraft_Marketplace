@@ -15,6 +15,7 @@ import {
   Package,
   Shield,
   Store,
+  Undo2,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -37,7 +38,8 @@ const Navbar = () => {
   const { isAuthenticated, role, user, logout } = useAuthStore();
   const cartCount = useCartStore((s) => s.itemCount());
   const wishlistCount = useWishlistStore((s) => s.count());
-  const { isMobileNavOpen, toggleMobileNav, closeMobileNav, toggleSearch } = useUIStore();
+  const { isMobileNavOpen, toggleMobileNav, closeMobileNav, toggleSearch, toggleCartDrawer } =
+    useUIStore();
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
 
   // Close the mobile nav whenever the route changes.
@@ -113,10 +115,11 @@ const Navbar = () => {
             </Link>
           )}
 
-          <Link
-            to={paths.cart()}
+          <button
+            type="button"
+            onClick={toggleCartDrawer}
             className="relative rounded-md p-2 text-text-inverse/80 hover:text-text-inverse"
-            aria-label="Cart"
+            aria-label="Open cart"
           >
             <ShoppingCart className="h-5 w-5" />
             {cartCount > 0 && (
@@ -124,7 +127,7 @@ const Navbar = () => {
                 {cartCount}
               </span>
             )}
-          </Link>
+          </button>
 
           {isAuthenticated ? (
             <div className="relative">
@@ -160,13 +163,22 @@ const Navbar = () => {
                     </>
                   )}
                   {role === 'vendor' && (
-                    <Link
-                      to={paths.vendorDashboard()}
-                      className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-surface-100"
-                      onClick={() => setAccountMenuOpen(false)}
-                    >
-                      <Store className="h-4 w-4" /> Vendor Dashboard
-                    </Link>
+                    <>
+                      <Link
+                        to={paths.vendorDashboard()}
+                        className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-surface-100"
+                        onClick={() => setAccountMenuOpen(false)}
+                      >
+                        <Store className="h-4 w-4" /> Vendor Dashboard
+                      </Link>
+                      <Link
+                        to={paths.vendorReturns()}
+                        className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-surface-100"
+                        onClick={() => setAccountMenuOpen(false)}
+                      >
+                        <Undo2 className="h-4 w-4" /> Vendor Returns
+                      </Link>
+                    </>
                   )}
                   {role === 'admin' && (
                     <Link

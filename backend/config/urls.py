@@ -15,6 +15,7 @@ from drf_spectacular.views import (
 )
 
 from apps.products import urls as products_urls
+from apps.orders import urls as apps_orders_urls
 
 api_v1_patterns = [
     path("common/", include(("apps.common.urls", "common"), namespace="common")),
@@ -31,7 +32,12 @@ api_v1_patterns = [
     path("vendor/", include((products_urls.vendor_router.urls, "vendor-products"), namespace="vendor-products")),
     path("cart/", include(("apps.cart.urls", "cart"), namespace="cart")),
     path("wishlist/", include(("apps.wishlist.urls", "wishlist"), namespace="wishlist")),
-    path("orders/", include(("apps.orders.urls", "orders"), namespace="orders")),
+    # Address book lives at /api/v1/addresses/ per spec
+    path(
+        "addresses/",
+        include((apps_orders_urls.address_urlpatterns, "addresses"), namespace="addresses"),
+    ),
+    path("", include(("apps.orders.urls", "orders"), namespace="orders")),
     path("reviews/", include(("apps.reviews.urls", "reviews"), namespace="reviews")),
     path("recommendations/", include(("apps.recommendations.urls", "recommendations"), namespace="recommendations")),
     path("compatibility/", include(("apps.compatibility.urls", "compatibility"), namespace="compatibility")),

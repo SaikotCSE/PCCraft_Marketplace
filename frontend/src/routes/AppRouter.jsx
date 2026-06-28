@@ -27,8 +27,8 @@ const VendorPendingPage = lazy(() => import('@pages/Vendor/VendorPendingPage'));
 const ForgotPasswordPage = lazy(() => import('@pages/Login/ForgotPasswordPage'));
 const ResetPasswordPage = lazy(() => import('@pages/Login/ResetPasswordPage'));
 
-const ProductsPage = lazy(() => import('@pages/Products/ProductsPage'));
-const ProductDetailPage = lazy(() => import('@pages/Products/ProductDetailPage'));
+const ShopPage = lazy(() => import('@pages/Products/ShopPage'));
+const ProductDetailPage = lazy(() => import('@pages/ProductDetails/ProductDetailPage'));
 const CategoriesPage = lazy(() => import('@pages/Categories/CategoriesPage'));
 const CategoryDetailPage = lazy(() => import('@pages/Categories/CategoryDetailPage'));
 const BrandsPage = lazy(() => import('@pages/Categories/BrandsPage'));
@@ -42,13 +42,14 @@ const CheckoutPage = lazy(() => import('@pages/Checkout/CheckoutPage'));
 const OrdersPage = lazy(() => import('@pages/Orders/OrdersPage'));
 const OrderDetailPage = lazy(() => import('@pages/Orders/OrderDetailPage'));
 const ReturnsPage = lazy(() => import('@pages/Orders/ReturnsPage'));
+const ReturnStatusPage = lazy(() => import('@pages/Orders/ReturnStatusPage'));
 const ProfilePage = lazy(() => import('@pages/Profile/ProfilePage'));
 
 const VendorDashboardPage = lazy(() => import('@pages/Vendor/VendorDashboardPage'));
 const VendorProductsPage = lazy(() => import('@pages/Vendor/VendorProductsPage'));
-const VendorProductNewPage = lazy(() => import('@pages/Vendor/VendorProductNewPage'));
-const VendorProductEditPage = lazy(() => import('@pages/Vendor/VendorProductEditPage'));
+const VendorProductFormPage = lazy(() => import('@pages/Vendor/VendorProductFormPage'));
 const VendorOrdersPage = lazy(() => import('@pages/Vendor/VendorOrdersPage'));
+const VendorReturnsPage = lazy(() => import('@pages/Vendor/VendorReturnsPage'));
 const VendorProfilePage = lazy(() => import('@pages/Vendor/VendorProfilePage'));
 const VendorPublicPage = lazy(() => import('@pages/Vendor/VendorPublicPage'));
 
@@ -86,7 +87,7 @@ export const router = createBrowserRouter([
       { path: ROUTE_PATHS.VENDOR_PENDING, element: withSuspense(VendorPendingPage) },
       { path: ROUTE_PATHS.RESET_PASSWORD, element: withSuspense(ResetPasswordPage) },
 
-      { path: ROUTE_PATHS.PRODUCTS, element: withSuspense(ProductsPage) },
+      { path: ROUTE_PATHS.PRODUCTS, element: withSuspense(ShopPage) },
       { path: ROUTE_PATHS.PRODUCT_DETAIL, element: withSuspense(ProductDetailPage) },
       { path: ROUTE_PATHS.CATEGORIES, element: withSuspense(CategoriesPage) },
       { path: ROUTE_PATHS.CATEGORY_DETAIL, element: withSuspense(CategoryDetailPage) },
@@ -106,6 +107,7 @@ export const router = createBrowserRouter([
           { path: ROUTE_PATHS.ORDERS, element: withSuspense(OrdersPage) },
           { path: ROUTE_PATHS.ORDER_DETAIL, element: withSuspense(OrderDetailPage) },
           { path: ROUTE_PATHS.RETURNS, element: withSuspense(ReturnsPage) },
+          { path: ROUTE_PATHS.RETURN_DETAIL, element: withSuspense(ReturnStatusPage) },
           { path: ROUTE_PATHS.PROFILE, element: withSuspense(ProfilePage) },
         ],
       },
@@ -116,9 +118,10 @@ export const router = createBrowserRouter([
         children: [
           { path: ROUTE_PATHS.VENDOR_DASHBOARD, element: withSuspense(VendorDashboardPage) },
           { path: ROUTE_PATHS.VENDOR_PRODUCTS, element: withSuspense(VendorProductsPage) },
-          { path: ROUTE_PATHS.VENDOR_PRODUCT_NEW, element: withSuspense(VendorProductNewPage) },
-          { path: ROUTE_PATHS.VENDOR_PRODUCT_EDIT, element: withSuspense(VendorProductEditPage) },
+          { path: ROUTE_PATHS.VENDOR_PRODUCT_NEW, element: withSuspense(VendorProductFormPage) },
+          { path: ROUTE_PATHS.VENDOR_PRODUCT_EDIT, element: withSuspense(VendorProductFormPage) },
           { path: ROUTE_PATHS.VENDOR_ORDERS, element: withSuspense(VendorOrdersPage) },
+          { path: ROUTE_PATHS.VENDOR_RETURNS, element: withSuspense(VendorReturnsPage) },
           { path: ROUTE_PATHS.VENDOR_PROFILE, element: withSuspense(VendorProfilePage) },
           { path: ROUTE_PATHS.VENDOR_PUBLIC, element: withSuspense(VendorPublicPage) },
         ],

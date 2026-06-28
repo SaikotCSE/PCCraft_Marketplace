@@ -21,11 +21,17 @@
 
 import { z } from 'zod';
 
-// Bangladesh mobile (E.164-compatible): +8801XXXXXXXXX or 01XXXXXXXXX
+// Bangladesh mobile: local 01XXXXXXXXX (11 digits) or international
+// +8801XXXXXXXXX / 8801XXXXXXXXX (13 digits). The leading 0 / +880 prefix is
+// required — `(\+?880)?` would otherwise accept bogus 11-digit numbers that
+// start with 1 (e.g. 17123456789).
 export const bdPhoneSchema = z
   .string()
   .trim()
-  .regex(/^(\+?880)?1[3-9]\d{8}$/, 'Enter a valid BD mobile number (e.g. 017XXXXXXXX)');
+  .regex(
+    /^(?:\+?880|0)1[3-9]\d{8}$/,
+    'Enter a valid BD mobile number (e.g. 01XXXXXXXXX or +8801XXXXXXXXX)',
+  );
 
 export const emailSchema = z
   .string()

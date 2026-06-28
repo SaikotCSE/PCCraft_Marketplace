@@ -14,7 +14,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('accounts', '0002_default_shipping_address'),
+        ('accounts', '0001_initial'),
         ('brands', '0001_initial'),
         ('categories', '0001_initial'),
     ]

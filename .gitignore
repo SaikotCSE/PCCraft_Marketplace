@@ -80,5 +80,8 @@ docs/.doctrees/
 .puku/
 .vite/
 
-# ── dev.sh runtime artefacts (logs + pid files) ──
-scripts/.runtime/
+
+
+
+CLAUDE.md
+PCCraft_Master_Spec_v4.md
