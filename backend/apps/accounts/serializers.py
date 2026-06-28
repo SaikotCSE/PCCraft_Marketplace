@@ -349,6 +349,31 @@ class VendorRegisterSerializer(serializers.Serializer):
 # ====================================================================
 # Profile (GET / PATCH /api/v1/auth/profile/)
 # ====================================================================
+class UserInlineSerializer(serializers.ModelSerializer):
+    """Tiny public-user shape -- used wherever a foreign-key to User is
+    embedded in another resource (reviews, comments, etc.).  Only the
+    non-sensitive fields are exposed; callers wanting the full profile
+    should hit ``/api/v1/auth/profile/``."""
+
+    avatar = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CustomUser
+        fields = ("id", "full_name", "email", "avatar", "date_joined")
+        read_only_fields = fields
+
+    def get_avatar(self, obj):
+        avatar = getattr(obj, "avatar", None)
+        if not avatar:
+            return None
+        request = self.context.get("request")
+        try:
+            url = avatar.url
+        except ValueError:
+            return None
+        return request.build_absolute_uri(url) if request else url
+
+
 class UserProfileSerializer(serializers.ModelSerializer):
     """Customer-facing profile serializer (used for PATCH and read)."""
 

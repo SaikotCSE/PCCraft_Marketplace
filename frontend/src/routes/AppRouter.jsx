@@ -58,6 +58,7 @@ const AdminVendorsPage = lazy(() => import('@pages/Admin/AdminVendorsPage'));
 const AdminUsersPage = lazy(() => import('@pages/Admin/AdminUsersPage'));
 const AdminOrdersPage = lazy(() => import('@pages/Admin/AdminOrdersPage'));
 const AdminReturnsPage = lazy(() => import('@pages/Admin/AdminReturnsPage'));
+const AdminReviewsPage = lazy(() => import('@pages/Admin/AdminReviewsPage'));
 
 const NotFoundPage = lazy(() => import('@pages/NotFound/NotFoundPage'));
 
@@ -136,6 +137,7 @@ export const router = createBrowserRouter([
           { path: ROUTE_PATHS.ADMIN_USERS, element: withSuspense(AdminUsersPage) },
           { path: ROUTE_PATHS.ADMIN_ORDERS, element: withSuspense(AdminOrdersPage) },
           { path: ROUTE_PATHS.ADMIN_RETURNS, element: withSuspense(AdminReturnsPage) },
+          { path: ROUTE_PATHS.ADMIN_REVIEWS, element: withSuspense(AdminReviewsPage) },
         ],
       },
 

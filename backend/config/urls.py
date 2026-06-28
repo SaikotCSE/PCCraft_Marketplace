@@ -16,6 +16,7 @@ from drf_spectacular.views import (
 
 from apps.products import urls as products_urls
 from apps.orders import urls as apps_orders_urls
+from apps.reviews import urls as apps_reviews_urls
 
 api_v1_patterns = [
     path("common/", include(("apps.common.urls", "common"), namespace="common")),
@@ -26,6 +27,18 @@ api_v1_patterns = [
     path("categories/", include(("apps.categories.urls", "categories"), namespace="categories")),
     path("brands/", include(("apps.brands.urls", "brands"), namespace="brands")),
     path("products/", include(("apps.products.urls", "products"), namespace="products")),
+    # Product-scoped review routes (lives in apps.reviews.urls, mounted
+    # here so the prefix matches the spec: /api/v1/products/<slug>/reviews/).
+    # NOTE: prefix is "products/" — mounting under "" would let the
+    # <slug:slug> URL converter swallow sibling prefixes like
+    # "admin" and collide with /admin/reviews/ etc.
+    path(
+        "products/",
+        include(
+            (apps_reviews_urls.product_router, "products-reviews"),
+            namespace="products-reviews",
+        ),
+    ),
     # The vendor router lives inside apps/products/urls.py under a
     # "vendor/" sub-prefix. Expose it at the project root so the spec's
     # /api/v1/vendor/products/* URLs resolve cleanly.
@@ -38,7 +51,13 @@ api_v1_patterns = [
         include((apps_orders_urls.address_urlpatterns, "addresses"), namespace="addresses"),
     ),
     path("", include(("apps.orders.urls", "orders"), namespace="orders")),
+    # Reviews (Module 6). Mounted three times so the spec's URL prefixes
+    # resolve cleanly: ``/products/<slug>/reviews/`` (already wired
+    # above), ``/reviews/<id>/`` + ``/reviews/<id>/helpful/``, and the
+    # vendor + admin prefixes below.
     path("reviews/", include(("apps.reviews.urls", "reviews"), namespace="reviews")),
+    path("vendor/reviews/", include((apps_reviews_urls.vendor_urlpatterns, "vendor-reviews"), namespace="vendor-reviews")),
+    path("admin/reviews/", include((apps_reviews_urls.admin_urlpatterns, "admin-reviews"), namespace="admin-reviews")),
     path("recommendations/", include(("apps.recommendations.urls", "recommendations"), namespace="recommendations")),
     path("compatibility/", include(("apps.compatibility.urls", "compatibility"), namespace="compatibility")),
     path("dashboard/", include(("apps.dashboard.urls", "dashboard"), namespace="dashboard")),

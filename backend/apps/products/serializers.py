@@ -198,3 +198,35 @@ class ProductImageWriteSerializer(serializers.ModelSerializer):
         model = ProductImage
         fields = ("id", "image", "alt_text", "display_order", "is_primary")
         read_only_fields = ("id",)
+
+class ProductInlineSerializer(serializers.ModelSerializer):
+    """Smallest possible product shape -- used when a foreign key to
+    Product is embedded in another resource (reviews, cart items,
+    order items, etc.)."""
+
+    primary_image = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Product
+        fields = (
+            "id",
+            "name",
+            "slug",
+            "base_price",
+            "discounted_price",
+            "average_rating",
+            "review_count",
+            "primary_image",
+        )
+        read_only_fields = fields
+
+    def get_primary_image(self, obj: Product):
+        img = (
+            obj.images.filter(is_active=True, is_primary=True).first()
+            or obj.images.filter(is_active=True).order_by("display_order").first()
+        )
+        if img is None:
+            return None
+        request = self.context.get("request")
+        url = img.image.url
+        return request.build_absolute_uri(url) if request else url

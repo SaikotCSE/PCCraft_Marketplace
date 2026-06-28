@@ -56,6 +56,7 @@ export const ROUTE_PATHS = Object.freeze({
   ADMIN_USERS: '/admin/users',
   ADMIN_ORDERS: '/admin/orders',
   ADMIN_RETURNS: '/admin/returns',
+  ADMIN_REVIEWS: '/admin/reviews',
 
   // ----- fallbacks -----
   NOT_FOUND: '*',
@@ -111,6 +112,7 @@ export const paths = {
   adminUsers: () => ROUTE_PATHS.ADMIN_USERS,
   adminOrders: () => ROUTE_PATHS.ADMIN_ORDERS,
   adminReturns: () => ROUTE_PATHS.ADMIN_RETURNS,
+  adminReviews: () => ROUTE_PATHS.ADMIN_REVIEWS,
 };
 
 // Nested `ROUTES` is the convenient short-hand used by pages:
@@ -141,6 +143,7 @@ export const ROUTES = Object.freeze({
     USERS: ROUTE_PATHS.ADMIN_USERS,
     ORDERS: ROUTE_PATHS.ADMIN_ORDERS,
     RETURNS: ROUTE_PATHS.ADMIN_RETURNS,
+    REVIEWS: ROUTE_PATHS.ADMIN_REVIEWS,
   }),
   LEGAL: Object.freeze({
     TERMS: '/legal/terms',

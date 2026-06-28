@@ -32,15 +32,22 @@ class APIResponse(Response):
         status: int = drf_status.HTTP_200_OK,
         meta: Mapping[str, Any] | None = None,
         error: Mapping[str, Any] | None = None,
+        message: str | None = None,
         success: bool | None = None,
         headers: Mapping[str, str] | None = None,
         exception: bool = False,
         content_type: str | None = None,
     ) -> None:
+        # ``message`` is folded into ``meta`` so the envelope keeps its
+        # four-slot shape (``success``/``data``/``meta``/``error``) while
+        # still letting views pass a human-readable toast string in one call.
+        merged_meta: dict[str, Any] = dict(meta or {})
+        if message is not None:
+            merged_meta.setdefault("message", message)
         envelope: dict[str, Any] = {
             "success": success if success is not None else error is None,
             "data": data,
-            "meta": dict(meta or {}),
+            "meta": merged_meta,
             "error": dict(error) if error is not None else None,
         }
         super().__init__(
@@ -58,6 +65,9 @@ def api_response(
     status: int = drf_status.HTTP_200_OK,
     meta: Mapping[str, Any] | None = None,
     error: Mapping[str, Any] | None = None,
+    message: str | None = None,
 ) -> APIResponse:
     """Functional helper -- equivalent to ``APIResponse(...)``."""
-    return APIResponse(data=data, status=status, meta=meta, error=error)
+    return APIResponse(
+        data=data, status=status, meta=meta, error=error, message=message
+    )

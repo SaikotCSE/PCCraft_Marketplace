@@ -97,32 +97,22 @@ WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
 
 # ─────────────────────────────────────────────────────────────────
-# Database -- PostgreSQL 18+ is the production target.
-# Set ``DB_ENGINE=sqlite`` to fall back to a local SQLite file --
-# useful for first-boot smoke tests when Postgres isn't reachable.
+# Database -- PostgreSQL 18+ is the only supported engine.
 # ─────────────────────────────────────────────────────────────────
-if config("DB_ENGINE", default="postgres") == "sqlite":
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "db.sqlite3",
-        }
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": config("DB_NAME", default="pccraft"),
+        "USER": config("DB_USER", default="pccraft"),
+        "PASSWORD": config("DB_PASSWORD", default="pccraft"),
+        "HOST": config("DB_HOST", default="127.0.0.1"),
+        "PORT": config("DB_PORT", default="5432"),
+        "CONN_MAX_AGE": 60,
+        "OPTIONS": {
+            "connect_timeout": 5,
+        },
     }
-else:
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.postgresql",
-            "NAME": config("DB_NAME", default="pccraft"),
-            "USER": config("DB_USER", default="pccraft"),
-            "PASSWORD": config("DB_PASSWORD", default="pccraft"),
-            "HOST": config("DB_HOST", default="127.0.0.1"),
-            "PORT": config("DB_PORT", default="5432"),
-            "CONN_MAX_AGE": 60,
-            "OPTIONS": {
-                "connect_timeout": 5,
-            },
-        }
-    }
+}
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

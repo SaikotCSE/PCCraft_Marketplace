@@ -1,4 +1,4 @@
-// ProductDetailPage — gallery, price, stock, specs, add-to-cart, reviews stub.
+// ProductDetailPage — gallery, price, stock, specs, reviews (Module 6), add-to-cart.
 // Spec §2.7.
 import { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
@@ -11,6 +11,7 @@ import ImageGallery from '@/components/products/ImageGallery';
 import PriceDisplay from '@/components/products/PriceDisplay';
 import StockBadge from '@/components/products/StockBadge';
 import ProductSpecsTable from '@/components/products/ProductSpecsTable';
+import ReviewsList from '@/components/reviews/ReviewsList';
 import { productService } from '@/services/productService';
 import { formatPrice } from '@/utils/formatters';
 
@@ -223,9 +224,10 @@ const ProductDetailPage = () => {
           />
         )}
         {tab === 'reviews' && (
-          <p className="rounded-xl border border-dashed border-border bg-bg-muted p-6 text-center text-sm text-text-secondary">
-            Reviews will appear here once Module 6 ships.
-          </p>
+          <ReviewsList
+            productSlug={product.slug}
+            productName={product.name}
+          />
         )}
         {tab === 'compatibility' && (
           <p className="rounded-xl border border-dashed border-border bg-bg-muted p-6 text-center text-sm text-text-secondary">

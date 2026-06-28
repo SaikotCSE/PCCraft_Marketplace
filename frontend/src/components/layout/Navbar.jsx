@@ -16,6 +16,7 @@ import {
   Shield,
   Store,
   Undo2,
+  Star,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -181,13 +182,22 @@ const Navbar = () => {
                     </>
                   )}
                   {role === 'admin' && (
-                    <Link
-                      to={paths.adminDashboard()}
-                      className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-surface-100"
-                      onClick={() => setAccountMenuOpen(false)}
-                    >
-                      <Shield className="h-4 w-4" /> Admin Panel
-                    </Link>
+                    <>
+                      <Link
+                        to={paths.adminDashboard()}
+                        className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-surface-100"
+                        onClick={() => setAccountMenuOpen(false)}
+                      >
+                        <Shield className="h-4 w-4" /> Admin Panel
+                      </Link>
+                      <Link
+                        to={paths.adminReviews()}
+                        className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-surface-100"
+                        onClick={() => setAccountMenuOpen(false)}
+                      >
+                        <Star className="h-4 w-4" /> Review moderation
+                      </Link>
+                    </>
                   )}
                   <button
                     type="button"

@@ -207,6 +207,20 @@ class Product(TimeStampedModel):
     def is_in_stock(self) -> bool:
         return self.stock_quantity > 0
 
+    # ------------------------------------------------------------------
+    # Review aggregate (Module 6 spec -- ``Product.avg_rating``)
+    # ------------------------------------------------------------------
+    @property
+    def avg_rating(self) -> float:
+        """Spec: ``Product.avg_rating`` -- average of non-hidden reviews.
+
+        Uses the denormalised ``average_rating`` column that the reviews
+        service keeps in sync.  Returns 0.0 when no reviews exist.
+        """
+        if self.average_rating is None:
+            return 0.0
+        return float(self.average_rating)
+
     @property
     def stock_status(self) -> str:
         if self.stock_quantity <= 0:
