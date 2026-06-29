@@ -37,7 +37,7 @@ import {
 import { usePageTitle } from '@/hooks/usePageTitle';
 import vendorService from '@services/vendorService';
 import { formatPrice } from '@utils/formatters';
-import { ROUTES } from '@routes/routePaths';
+import { paths } from '@routes/routePaths';
 
 const RANGE_OPTIONS = [
   { value: '7d', label: 'Last 7 days' },
@@ -396,7 +396,7 @@ function LowStockList({ rows, loading }) {
             </p>
           </div>
           <Link
-            to={ROUTES.vendorProductEdit(row.slug)}
+            to={paths.vendorProductEdit(row.slug)}
             className="inline-flex items-center gap-1 rounded-md border border-surface-200 px-2 py-1 text-xs font-medium text-text-primary transition hover:bg-surface-50"
           >
             Update stock

@@ -46,11 +46,18 @@ _DEFAULT_RANGE = "30d"
 _MAX_RANGE_DAYS = max(_RANGE_TO_DAYS.values())
 """Hard upper bound used when validating arbitrary ``?days=`` params."""
 
-_VENDOR_REVENUE_FILTER = (
+_VENDOR_REVENUE_Q = (
     Q(payment_status="PAID")
     | Q(status__in=("CONFIRMED", "PROCESSING", "SHIPPED", "OUT_FOR_DELIVERY", "DELIVERED"))
 )
-"""Same revenue rule as the admin module, applied at the OrderItem level."""
+"""Same revenue rule as ``apps.dashboard.services._PAID_ORDER_FILTER``.
+
+Defined as a top-level ``Q`` because it must be evaluated against
+``Order`` -- ``OrderItem`` has no ``payment_status`` of its own. This
+filter is applied at the ``Order`` level via the ``_paid_order_ids``
+helper below; subqueries then scope ``OrderItem`` rows to only those
+paid-or-further-along orders.
+"""
 
 _ACTIVE_RETURN_STATUSES = frozenset({
     ReturnStatus.PENDING,
@@ -138,7 +145,9 @@ def build_overview(vendor_profile: VendorProfile) -> dict:
         status__in=("SHIPPED", "OUT_FOR_DELIVERY")
     ).count()
 
-    revenue_qs = item_qs.filter(_VENDOR_REVENUE_FILTER)
+    # ``payment_status`` lives on ``Order``; scope line items via a
+    # subquery on ``order_id`` so we honor the paid-order rule per-vendor.
+    revenue_qs = item_qs.filter(order_id__in=_paid_order_ids())
     total_revenue_all_time = revenue_qs.aggregate(
         total=Coalesce(
             Sum(F("unit_price") * F("quantity"), output_field=DecimalField()),
@@ -189,17 +198,13 @@ def build_revenue_over_time(
     Days with no orders still appear with zero values so the chart line
     starts at the leftmost edge of the window instead of jumping.
     """
-    # NOTE: _VENDOR_REVENUE_FILTER is a Q-object and must be passed by
-    # keyword (``filter(Q_obj, ...)``) because the date range lookups
-    # are already keyword args -- Python forbids positional args after
-    # keyword args in a single call.
     item_qs = (
         OrderItem.objects
         .filter(
             vendor=vendor_profile,
             order__created_at__date__gte=window.start,
             order__created_at__date__lte=window.end,
-            **_VENDOR_REVENUE_FILTER,
+            order_id__in=_paid_order_ids(),
         )
         .annotate(day=TruncDate("order__created_at"))
         .values("day")
@@ -238,7 +243,10 @@ def build_top_products(vendor_profile: VendorProfile, limit: int) -> List[dict]:
     """
     item_qs = (
         OrderItem.objects
-        .filter(vendor=vendor_profile, **_VENDOR_REVENUE_FILTER)
+        .filter(
+            vendor=vendor_profile,
+            order_id__in=_paid_order_ids(),
+        )
         .values("product_id")
         .annotate(
             total_sold=Coalesce(
@@ -306,6 +314,18 @@ def build_low_stock(vendor_profile: VendorProfile) -> List[dict]:
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+def _paid_order_ids():
+    """Return ``Order`` ids that count as revenue (paid or past PENDING_PAYMENT).
+
+    The vendor revenue filter is applied at the ``Order`` level --
+    ``OrderItem`` has no ``payment_status`` field -- and the resulting
+    queryset is used as a subquery against ``OrderItem.order``. This
+    mirrors the admin dashboard's pattern in
+    ``apps.dashboard.services.build_top_products``.
+    """
+    return Order.objects.filter(_VENDOR_REVENUE_Q).values("id")
+
+
 def _low_stock_products(vendor_profile: VendorProfile):
     """Products the vendor should restock.
 
