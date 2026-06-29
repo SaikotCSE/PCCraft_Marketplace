@@ -498,6 +498,11 @@ class ProductSearchService:
         callers — drafts, paused, archived and hidden rows are
         filtered out by design.
         """
+        from django.contrib.postgres.search import (
+            SearchQuery,
+            SearchRank,
+            SearchVector,
+        )
         from django.db.models import Avg, Count, Q
 
         qs = (
@@ -507,11 +512,40 @@ class ProductSearchService:
         )
 
         if q:
-            qs = qs.filter(
-                Q(name__icontains=q)
-                | Q(description__icontains=q)
-                | Q(sku__icontains=q)
-            )
+            # Use the GIN-indexed ``search_vector`` (name=A, short=B, desc=C)
+            # for the primary full-text match, then fall back to
+            # ``icontains`` on the same fields so a typo in an unindexed
+            # column (e.g. SKU) still surfaces. The GIN lookup alone would
+            # miss anything that hasn't been vectorised yet.
+            try:
+                sq = SearchQuery(q, search_type="websearch")
+                qs = qs.annotate(
+                    _rank=SearchRank(
+                        SearchVector("name", weight="A")
+                        + SearchVector("short_description", weight="B")
+                        + SearchVector("description", weight="C"),
+                        sq,
+                    )
+                ).filter(
+                    Q(search_vector=sq)
+                    | Q(name__icontains=q)
+                    | Q(short_description__icontains=q)
+                    | Q(description__icontains=q)
+                )
+                # Relevance sort needs the rank to be the first ORDER BY
+                # term; downstream callers can override.
+                if ordering in {"relevance", ""}:
+                    qs = qs.order_by("-_rank", "-created_at")
+            except Exception:  # noqa: BLE001
+                # SQLite (tests) has no ``search_vector``; fall back to plain
+                # icontains so the search endpoint still responds.
+                logger.warning("FTS unavailable, falling back to icontains")
+                qs = qs.filter(
+                    Q(name__icontains=q)
+                    | Q(short_description__icontains=q)
+                    | Q(description__icontains=q)
+                    | Q(sku__icontains=q)
+                )
 
         if category_slugs:
             qs = qs.filter(category__slug__in=category_slugs)
@@ -528,25 +562,46 @@ class ProductSearchService:
         if discount:
             qs = qs.filter(discounted_price__isnull=False)
 
+        # NOTE: ``Review.product`` declares ``related_query_name="review"``
+        # (singular) so cross-app ``__`` lookups must use the query name,
+        # not the manager name (``reviews``). Using ``reviews__rating`` raises
+        # ``FieldError`` at SQL build time.
         if min_rating is not None:
-            qs = qs.annotate(_avg_rating=Avg("reviews__rating")).filter(
+            qs = qs.annotate(_avg_rating=Avg("review__rating")).filter(
                 _avg_rating__gte=min_rating,
             )
 
         if vendor_id:
             qs = qs.filter(vendor_id=vendor_id)
 
-        # Annotate review count once so ordering is stable.
-        qs = qs.annotate(_review_count=Count("reviews", distinct=True))
+        # Annotate review count once so ordering is stable. Same caveat as
+        # above — must use the query name (``review``), not the manager
+        # (``reviews``) which is only resolvable as a Python attribute.
+        qs = qs.annotate(_review_count=Count("review", distinct=True))
 
-        allowed_orders = {
-            "created_at", "-created_at",
-            "base_price", "-base_price",
-            "name", "-name",
-        }
-        if ordering and ordering in allowed_orders:
-            qs = qs.order_by(ordering)
+        # Spec §11.1: ordering values are
+        # ``relevance | newest | price | -price | rating | popularity``.
+        # ``relevance`` is the default for a non-empty ``q``; ``popularity``
+        # sorts by ``total_sold``; ``rating`` uses the denormalised
+        # ``average_rating`` column (kept in sync by ReviewService).
+        if ordering in {"newest", "relevance", ""}:
+            order_expr = "-created_at"
+        elif ordering == "price":
+            order_expr = "base_price"
+        elif ordering == "-price":
+            order_expr = "-base_price"
+        elif ordering == "rating":
+            order_expr = "-average_rating"
+        elif ordering == "-rating":
+            order_expr = "average_rating"
+        elif ordering == "popularity":
+            order_expr = "-total_sold"
+        elif ordering == "-popularity":
+            order_expr = "total_sold"
         else:
-            qs = qs.order_by("-created_at")
+            # Unknown / unsupported values fall back to newest so a bad URL
+            # never 500s.
+            order_expr = "-created_at"
+        qs = qs.order_by(order_expr)
 
         return qs

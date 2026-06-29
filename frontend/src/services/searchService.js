@@ -10,7 +10,7 @@ export const searchService = {
    *                            vendor, ordering, page, page_size).
    */
   products: (q, params) =>
-    api.get('/search/products/', { params: { q, ...params } }).then(unwrap),
+    api.get('/search/', { params: { q, ...params } }).then(unwrap),
 
   /**
    * Live autocomplete. Returns up to 5 product names + 3 category names
@@ -25,6 +25,14 @@ export const searchService = {
    * Used by the search results empty state.
    */
   trending: () => api.get('/search/trending/').then(unwrap),
+
+  /**
+   * Trending products shown in the empty-state of the search results
+   * page when the user's query returns zero matches (Module 11 §11.1
+   * frontend: "suggested categories or trending products below").
+   */
+  trendingProducts: (limit = 8) =>
+    api.get('/search/trending-products/', { params: { limit } }).then(unwrap),
 };
 
 export default searchService;

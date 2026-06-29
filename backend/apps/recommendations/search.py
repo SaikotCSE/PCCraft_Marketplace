@@ -257,6 +257,61 @@ def search_trending(request: Request) -> Response:
 
 
 # ---------------------------------------------------------------------------
+# /api/v1/search/trending-products/  (public)
+# ---------------------------------------------------------------------------
+TRENDING_PRODUCTS_DEFAULT = 8
+TRENDING_PRODUCTS_MAX = 20
+TRENDING_PRODUCTS_CACHE_TTL = 60 * 5  # 5 minutes — cheap to recompute
+
+
+@api_view(["GET"])
+@permission_classes([permissions.AllowAny])
+def search_trending_products(request: Request) -> Response:
+    """Public product suggestions for the no-results empty state.
+
+    Spec §11.1 frontend: "No-results empty state: search icon, 'No results
+    for ...', suggested categories or trending products below". Returns
+    up to 8 active, in-stock products ordered by ``total_sold`` then
+    ``average_rating`` so the row feels curated rather than random.
+    """
+    limit_raw = request.query_params.get("limit") or TRENDING_PRODUCTS_DEFAULT
+    try:
+        limit = max(1, min(int(limit_raw), TRENDING_PRODUCTS_MAX))
+    except (TypeError, ValueError):
+        limit = TRENDING_PRODUCTS_DEFAULT
+
+    cache_key = f"search:trending:products:{limit}"
+    cached = _cache_get_json(cache_key)
+    if cached is not None:
+        return APIResponse(
+            data={"results": cached},
+            meta={"limit": limit, "cached": True},
+        )
+
+    products = (
+        Product.objects
+        .filter(
+            is_active=True,
+            status=ProductStatus.ACTIVE,
+            stock_quantity__gt=0,
+        )
+        .order_by("-total_sold", "-average_rating", "-created_at")
+        .only(
+            "id", "name", "slug", "short_description",
+            "base_price", "discounted_price", "average_rating",
+        )[:limit]
+    )
+    serialized = ProductListSerializer(
+        products, many=True, context={"request": request}
+    ).data
+    _cache_set_json(cache_key, serialized, ttl=TRENDING_PRODUCTS_CACHE_TTL)
+    return APIResponse(
+        data={"results": serialized},
+        meta={"limit": limit, "cached": False},
+    )
+
+
+# ---------------------------------------------------------------------------
 # /api/v1/search/zero-result/  (staff)
 # ---------------------------------------------------------------------------
 ZERO_RESULT_WINDOW_DAYS = 30

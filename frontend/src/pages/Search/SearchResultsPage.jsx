@@ -28,6 +28,7 @@ import { categoryService } from '@/services/categoryService';
 import { brandService } from '@/services/brandService';
 import { PAGINATION_DEFAULTS } from '@/utils/constants';
 import { cn } from '@/utils/cn';
+import { paths } from '@/routes/routePaths';
 
 const SORT_OPTIONS = [
   { value: 'relevance', label: 'Best match' },
@@ -106,6 +107,14 @@ const SearchResultsPage = () => {
     staleTime: 60_000 * 60,
   });
 
+  // Trending products — shown as a "you might like" row in the empty
+  // state (spec §11.1 frontend).
+  const { data: trendingProductsData } = useQuery({
+    queryKey: ['search', 'trending-products'],
+    queryFn: () => searchService.trendingProducts(8),
+    staleTime: 60_000 * 5,
+  });
+
   // Categories tree + flat brand list for the sidebar filters.
   const { data: catsData } = useQuery({
     queryKey: ['categories-tree'],
@@ -141,6 +150,12 @@ const SearchResultsPage = () => {
     if (!Array.isArray(raw)) return [];
     return raw.filter((r) => r && r.query).slice(0, 8);
   }, [trendingData]);
+
+  const trendingProducts = useMemo(() => {
+    const raw = trendingProductsData?.results ?? trendingProductsData ?? [];
+    if (!Array.isArray(raw)) return [];
+    return raw.slice(0, 8);
+  }, [trendingProductsData]);
 
   const patchSp = (patch) => {
     const next = new URLSearchParams(sp);
@@ -327,7 +342,7 @@ const SearchResultsPage = () => {
                     {trendingQueries.map((t) => (
                       <Link
                         key={t.query}
-                        to={`/search?q=${encodeURIComponent(t.query)}`}
+                        to={`${paths.search()}?q=${encodeURIComponent(t.query)}`}
                         className="rounded-full border border-border bg-surface px-3 py-1 text-xs font-medium text-text-primary hover:border-accent-300 hover:text-accent-500"
                       >
                         {t.query}
@@ -340,7 +355,11 @@ const SearchResultsPage = () => {
           ) : isLoading ? (
             <ProductGrid isLoading skeletonCount={8} SkeletonComponent={Skeleton} />
           ) : showEmpty ? (
-            <SearchEmptyState query={query} trending={trendingQueries} />
+            <SearchEmptyState
+              query={query}
+              trending={trendingQueries}
+              products={trendingProducts}
+            />
           ) : (
             <ProductGrid products={results} />
           )}
@@ -359,40 +378,63 @@ const SearchResultsPage = () => {
 };
 
 // ---------------------------------------------------------------------
-// Empty state
+// Empty state — shown when the query returns 0 products. Spec §11.1
+// frontend: "search icon, 'No results for ...', suggested categories or
+// trending products below". We render trending queries as clickable
+// chips AND a row of trending product cards so the dead-end has at
+// least two recovery paths.
 // ---------------------------------------------------------------------
-const SearchEmptyState = ({ query, trending }) => (
-  <div className="rounded-xl border border-dashed border-surface-300 bg-surface-50 px-6 py-16 text-center">
-    <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-surface-100 text-text-secondary">
-      <SearchIcon className="h-7 w-7" aria-hidden="true" />
-    </div>
-    <h2 className="mt-4 font-heading text-lg font-semibold text-text-primary">
-      No results for “{query}”
-    </h2>
-    <p className="mt-2 max-w-md text-sm text-text-secondary">
-      Check your spelling, broaden your filters, or try one of the trending
-      searches below.
-    </p>
-    {trending.length > 0 && (
-      <div className="mt-6">
-        <p className="mb-2 flex items-center justify-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-text-secondary">
-          <TrendingUp className="h-3.5 w-3.5" /> Trending right now
-        </p>
-        <div className="flex flex-wrap justify-center gap-2">
-          {trending.map((t) => (
-            <Link
-              key={t.query}
-              to={`/search?q=${encodeURIComponent(t.query)}`}
-              className={cn(
-                'rounded-full border border-border bg-surface px-3 py-1 text-xs font-medium text-text-primary',
-                'hover:border-accent-300 hover:text-accent-500'
-              )}
-            >
-              {t.query}
-            </Link>
-          ))}
-        </div>
+const SearchEmptyState = ({ query, trending = [], products = [] }) => (
+  <div className="space-y-8">
+    <div className="rounded-xl border border-dashed border-surface-300 bg-surface-50 px-6 py-12 text-center">
+      <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-surface-100 text-text-secondary">
+        <SearchIcon className="h-7 w-7" aria-hidden="true" />
       </div>
+      <h2 className="mt-4 font-heading text-lg font-semibold text-text-primary">
+        No results for “{query}”
+      </h2>
+      <p className="mt-2 max-w-md text-sm text-text-secondary">
+        Check your spelling, broaden your filters, or try one of the trending
+        searches below.
+      </p>
+      {trending.length > 0 && (
+        <div className="mt-6">
+          <p className="mb-2 flex items-center justify-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-text-secondary">
+            <TrendingUp className="h-3.5 w-3.5" /> Trending right now
+          </p>
+          <div className="flex flex-wrap justify-center gap-2">
+            {trending.map((t) => (
+              <Link
+                key={t.query}
+                to={`${paths.search()}?q=${encodeURIComponent(t.query)}`}
+                className={cn(
+                  'rounded-full border border-border bg-surface px-3 py-1 text-xs font-medium text-text-primary',
+                  'hover:border-accent-300 hover:text-accent-500'
+                )}
+              >
+                {t.query}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+
+    {products.length > 0 && (
+      <section>
+        <header className="mb-4 flex items-center justify-between">
+          <h3 className="font-heading text-base font-semibold text-text-primary">
+            Popular on PCCraft
+          </h3>
+          <Link
+            to={paths.products()}
+            className="text-xs font-medium text-text-secondary hover:text-accent-500"
+          >
+            Browse all products →
+          </Link>
+        </header>
+        <ProductGrid products={products} />
+      </section>
     )}
   </div>
 );

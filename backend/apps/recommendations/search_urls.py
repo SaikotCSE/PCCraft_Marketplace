@@ -30,6 +30,11 @@ urlpatterns = [
         name="trending",
     ),
     path(
+        "trending-products/",
+        search.search_trending_products,
+        name="trending-products",
+    ),
+    path(
         "zero-result/",
         search.zero_result_queries,
         name="zero-result",
