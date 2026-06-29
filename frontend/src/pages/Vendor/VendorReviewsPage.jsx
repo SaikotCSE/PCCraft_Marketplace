@@ -17,9 +17,9 @@ import { MessageSquare, Reply } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 import { usePageTitle } from '@/hooks/usePageTitle';
-import StarRating from '@/components/reviews/StarRating';
-import { VendorReplyBlock } from '@/components/reviews/ReviewCard';
-import VendorReplyModal from '@/components/reviews/VendorReplyModal';
+import StarRating from '@/components/products/StarRating';
+import { VendorReplyBlock } from '@/components/products/ReviewCard';
+import VendorReplyModal from '@/components/products/VendorReplyModal';
 import Skeleton from '@/components/common/Skeleton';
 import EmptyState from '@/components/common/EmptyState';
 import { reviewService } from '@/services/reviewService';

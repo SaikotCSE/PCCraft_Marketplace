@@ -160,3 +160,238 @@ class CategoryService:
                 "Remove or re-parent child categories before deleting this one.",
             )
         category.soft_delete()
+
+
+# ====================================================================
+# CategoryAdminService — Module 9 admin category CRUD
+# ====================================================================
+class CategoryAdminServiceError(Exception):
+    """Typed error for admin-category operations. Views read ``exc.http_status``."""
+
+    DEFAULT_HTTP_STATUS = 400
+
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        *,
+        fields: dict | None = None,
+        http_status: int | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.fields = fields or {}
+        self.http_status = http_status or self.DEFAULT_HTTP_STATUS
+
+
+class CategoryAdminService:
+    """Business-logic for admin category CRUD (Module 9 §9.4).
+
+    Differences from :class:`CategoryService`:
+
+    * admin actions write an audit-log entry,
+    * admin can soft-delete a category that still has children ONLY if
+      they re-parent or hard-delete the children (we refuse by default
+      and surface ``has_children``).
+    * the admin tree endpoint exposes inactive rows too.
+    """
+
+    @staticmethod
+    def list_categories(*, search: str = "", is_active: str = "", parent: str = "", ordering: str = "display_order"):
+        qs = Category.all_objects.all()
+        if search:
+            qs = qs.filter(name__icontains=search.strip())
+        if is_active in {"true", "1", "yes"}:
+            qs = qs.filter(is_active=True)
+        elif is_active in {"false", "0", "no"}:
+            qs = qs.filter(is_active=False)
+        if parent:
+            qs = qs.filter(parent__slug=parent)
+        allowed = {"display_order", "-display_order", "name", "-name",
+                   "created_at", "-created_at"}
+        if ordering in allowed:
+            qs = qs.order_by(ordering)
+        else:
+            qs = qs.order_by("display_order", "name")
+        return qs
+
+    @staticmethod
+    def get_category_by_slug(slug: str) -> Category:
+        try:
+            return Category.all_objects.get(slug=slug)
+        except Category.DoesNotExist as exc:
+            raise CategoryAdminServiceError(
+                "not_found",
+                "Category not found.",
+                fields={"slug": "No category with that slug."},
+                http_status=404,
+            ) from exc
+
+    @staticmethod
+    def tree(*, include_inactive: bool = True):
+        """Return a nested list of categories for the admin tree page.
+
+        Output shape::
+
+            [
+              {
+                "id": ..., "slug": ..., "name": ..., "is_active": ...,
+                "children": [
+                    {"id": ..., "slug": ..., "name": ..., "is_active": ...},
+                    ...
+                ],
+              },
+              ...
+            ]
+        """
+        qs = Category.all_objects.select_related("parent").order_by(
+            "display_order", "name",
+        )
+        if not include_inactive:
+            qs = qs.filter(is_active=True)
+
+        by_parent: dict = {}
+        for cat in qs:
+            key = cat.parent_id or "_root"
+            by_parent.setdefault(key, []).append(cat)
+
+        def _node(cat: Category) -> dict:
+            return {
+                "id": str(cat.id),
+                "slug": cat.slug,
+                "name": cat.name,
+                "is_active": cat.is_active,
+                "display_order": cat.display_order,
+                "parent": cat.parent_id and str(cat.parent_id),
+                "children": [
+                    _node(child) for child in by_parent.get(cat.id, [])
+                ],
+            }
+
+        return [_node(root) for root in by_parent.get("_root", [])]
+
+    @staticmethod
+    @transaction.atomic
+    def create(*, actor, data: dict, request=None) -> Category:
+        name = (data.get("name") or "").strip()
+        if not name:
+            raise CategoryAdminServiceError(
+                "validation_error",
+                "Name is required.",
+                fields={"name": "This field is required."},
+                http_status=400,
+            )
+        slug = (data.get("slug") or "").strip()
+        if slug and Category.all_objects.filter(slug=slug).exists():
+            raise CategoryAdminServiceError(
+                "slug_taken",
+                "Slug already in use.",
+                fields={"slug": "Slug already in use."},
+                http_status=400,
+            )
+        parent = data.get("parent")
+        if parent is not None and parent.parent_id is not None:
+            raise CategoryAdminServiceError(
+                "too_deep",
+                "Categories may only be nested one level deep.",
+                fields={"parent": "Categories may only be nested one level deep."},
+                http_status=400,
+            )
+        category = Category(
+            name=name,
+            slug=slug,
+            description=data.get("description", "") or "",
+            display_order=int(data.get("display_order") or 0),
+            is_active=bool(data.get("is_active", True)),
+            spec_template=data.get("spec_template") or [],
+            parent=parent,
+            icon=data.get("icon"),
+            image=data.get("image"),
+        )
+        category.save()
+        CategoryAdminService._audit(actor, "category.create", category, request=request)
+        return category
+
+    @staticmethod
+    @transaction.atomic
+    def update(*, actor, category: Category, data: dict, request=None) -> Category:
+        editable = {
+            "name", "slug", "description", "display_order",
+            "is_active", "spec_template", "parent", "icon", "image",
+        }
+        if "slug" in data and data["slug"]:
+            new_slug = data["slug"].strip()
+            if (
+                new_slug != category.slug
+                and Category.all_objects.filter(slug=new_slug).exists()
+            ):
+                raise CategoryAdminServiceError(
+                    "slug_taken",
+                    "Slug already in use.",
+                    fields={"slug": "Slug already in use."},
+                    http_status=400,
+                )
+            category.slug = new_slug
+        if "parent" in data:
+            new_parent = data["parent"]
+            if new_parent is not None:
+                if new_parent.id == category.id:
+                    raise CategoryAdminServiceError(
+                        "self_parent",
+                        "A category cannot be its own parent.",
+                        fields={"parent": "A category cannot be its own parent."},
+                        http_status=400,
+                    )
+                if new_parent.parent_id is not None:
+                    raise CategoryAdminServiceError(
+                        "too_deep",
+                        "Categories may only be nested one level deep.",
+                        fields={"parent": "Categories may only be nested one level deep."},
+                        http_status=400,
+                    )
+            category.parent = new_parent
+        for field in editable - {"slug", "parent"}:
+            if field in data:
+                setattr(category, field, data[field])
+        category.save()
+        CategoryAdminService._audit(actor, "category.update", category, request=request)
+        return category
+
+    @staticmethod
+    @transaction.atomic
+    def soft_delete(*, actor, category: Category, request=None) -> None:
+        if Category.all_objects.filter(parent=category).exists():
+            raise CategoryAdminServiceError(
+                "has_children",
+                "Remove or re-parent child categories before deleting this one.",
+                http_status=400,
+            )
+        category.soft_delete()
+        CategoryAdminService._audit(actor, "category.soft_delete", category, request=request)
+
+    @staticmethod
+    @transaction.atomic
+    def restore(*, actor, category: Category, request=None) -> Category:
+        if category.is_active:
+            return category
+        category.is_active = True
+        category.save(update_fields=["is_active", "updated_at"])
+        CategoryAdminService._audit(actor, "category.restore", category, request=request)
+        return category
+
+    @staticmethod
+    def _audit(actor, action: str, target, *, request=None):
+        try:
+            from apps.common.audit import log_action  # type: ignore
+        except Exception:  # pragma: no cover
+            return
+        try:
+            log_action(
+                actor=actor,
+                action=action,
+                target=target,
+                request=request,
+            )
+        except Exception:  # pragma: no cover
+            logger.exception("audit log failed for %s", action)

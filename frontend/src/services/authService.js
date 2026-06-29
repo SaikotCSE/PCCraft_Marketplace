@@ -71,26 +71,27 @@ export const authService = {
 
   /**
    * Vendor application — multipart form because it carries two PDFs.
+   *
+   * IMPORTANT: do NOT set `Content-Type: multipart/form-data` here.
+   * Forcing the header strips the boundary, and the server sees a body
+   * that can't be parsed. The browser / XHR appends the right
+   * `multipart/form-data; boundary=…` automatically when we leave the
+   * header alone and pass a real `FormData` instance.
    * @param {FormData} formData
    */
   registerVendor(formData) {
-    return api
-      .post('/auth/register/vendor/', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
-      .then(unwrap);
+    return api.post('/auth/register/vendor/', formData).then(unwrap);
   },
 
   /**
    * Vendor resubmission of trade-license / NID after INFO_REQUESTED.
+   *
+   * Same gotcha as `registerVendor` — see comment there about why we
+   * leave the Content-Type header unset.
    * @param {FormData} formData — must contain at least one of `trade_license_doc`, `nid_doc`.
    */
   uploadVendorDocuments(formData) {
-    return api
-      .patch('/auth/vendor/documents/', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
-      .then(unwrap);
+    return api.patch('/auth/vendor/documents/', formData).then(unwrap);
   },
 
   // ─── Profile ─────────────────────────────────────────────────────
@@ -111,6 +112,29 @@ export const authService = {
     return api.patch('/auth/profile/', patch).then(unwrap);
   },
 
+  // ─── Email verification (OTP) ────────────────────────────────────
+  /**
+   * Submit the 6-digit verification code sent to `email` during signup.
+   * On success returns the same `{access, refresh, user}` envelope as
+   * `login` so the caller can reuse `useAuthStore.setAuth`.
+   * @param {{ email: string, code: string }} payload
+   * @returns {Promise<{access: string, refresh: string, user: object}>}
+   */
+  verifyOtp(payload) {
+    return api.post('/auth/verify-email/', payload).then(unwrap);
+  },
+
+  /**
+   * Re-send the verification code. The endpoint always returns the
+   * generic 200 envelope so callers don't have to handle "not_found"
+   * vs "already_verified" specially.
+   * @param {{ email: string }} payload
+   * @returns {Promise<{message: string}>}
+   */
+  resendOtp(payload) {
+    return api.post('/auth/resend-otp/', payload).then(unwrap);
+  },
+
   // ─── Password reset (stub endpoints — wired once the backend adds
   //     dedicated `password_reset_confirm` views). For now we keep the
   //     same shape so swapping the URLs is a one-line change.
@@ -121,6 +145,17 @@ export const authService = {
 
   confirmPasswordReset(payload) {
     return api.post('/auth/password/reset/confirm/', payload).then(unwrap);
+  },
+
+  // ─── Change password (authenticated) ─────────────────────────────
+  /**
+   * Change the password of the currently logged-in user.
+   * Requires a valid `Authorization: Bearer <access>` header.
+   * @param {{ current_password: string, new_password: string, confirm_new_password: string }} payload
+   * @returns {Promise<{message: string}>}
+   */
+  changePassword(payload) {
+    return api.post('/auth/change-password/', payload).then(unwrap);
   },
 };
 

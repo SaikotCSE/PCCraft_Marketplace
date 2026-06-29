@@ -49,7 +49,10 @@ export const ROUTE_PATHS = Object.freeze({
   VENDOR_PRODUCT_EDIT: '/vendor/products/:slug/edit',
   VENDOR_ORDERS: '/vendor/orders',
   VENDOR_RETURNS: '/vendor/returns',
+  VENDOR_REVIEWS: '/vendor/reviews',
   VENDOR_PROFILE: '/vendor/profile',
+  // Module 10 — "My Store" surface; storefront + branding settings.
+  VENDOR_STORE: '/vendor/store',
   VENDOR_PUBLIC: '/vendors/:storeSlug',
 
   // ----- admin -----
@@ -59,6 +62,13 @@ export const ROUTE_PATHS = Object.freeze({
   ADMIN_ORDERS: '/admin/orders',
   ADMIN_RETURNS: '/admin/returns',
   ADMIN_REVIEWS: '/admin/reviews',
+  ADMIN_PRODUCTS: '/admin/products',
+  ADMIN_BRANDS: '/admin/brands',
+  ADMIN_BRAND_NEW: '/admin/brands/new',
+  ADMIN_BRAND_EDIT: '/admin/brands/:slug/edit',
+  ADMIN_CATEGORIES: '/admin/categories',
+  ADMIN_CATEGORY_NEW: '/admin/categories/new',
+  ADMIN_CATEGORY_EDIT: '/admin/categories/:slug/edit',
 
   // ----- fallbacks -----
   NOT_FOUND: '*',
@@ -108,7 +118,9 @@ export const paths = {
   vendorProductEdit: (slug) => buildPath(ROUTE_PATHS.VENDOR_PRODUCT_EDIT, { slug }),
   vendorOrders: () => ROUTE_PATHS.VENDOR_ORDERS,
   vendorReturns: () => ROUTE_PATHS.VENDOR_RETURNS,
+  vendorReviews: () => ROUTE_PATHS.VENDOR_REVIEWS,
   vendorProfile: () => ROUTE_PATHS.VENDOR_PROFILE,
+  vendorStore: () => ROUTE_PATHS.VENDOR_STORE,
   vendorPublic: (storeSlug) => buildPath(ROUTE_PATHS.VENDOR_PUBLIC, { storeSlug }),
 
   adminDashboard: () => ROUTE_PATHS.ADMIN_DASHBOARD,
@@ -117,6 +129,13 @@ export const paths = {
   adminOrders: () => ROUTE_PATHS.ADMIN_ORDERS,
   adminReturns: () => ROUTE_PATHS.ADMIN_RETURNS,
   adminReviews: () => ROUTE_PATHS.ADMIN_REVIEWS,
+  adminProducts: () => ROUTE_PATHS.ADMIN_PRODUCTS,
+  adminBrands: () => ROUTE_PATHS.ADMIN_BRANDS,
+  adminBrandNew: () => ROUTE_PATHS.ADMIN_BRAND_NEW,
+  adminBrandEdit: (slug) => buildPath(ROUTE_PATHS.ADMIN_BRAND_EDIT, { slug }),
+  adminCategories: () => ROUTE_PATHS.ADMIN_CATEGORIES,
+  adminCategoryNew: () => ROUTE_PATHS.ADMIN_CATEGORY_NEW,
+  adminCategoryEdit: (slug) => buildPath(ROUTE_PATHS.ADMIN_CATEGORY_EDIT, { slug }),
 };
 
 // Nested `ROUTES` is the convenient short-hand used by pages:
@@ -143,7 +162,9 @@ export const ROUTES = Object.freeze({
     PRODUCTS: ROUTE_PATHS.VENDOR_PRODUCTS,
     ORDERS: ROUTE_PATHS.VENDOR_ORDERS,
     RETURNS: ROUTE_PATHS.VENDOR_RETURNS,
+    REVIEWS: ROUTE_PATHS.VENDOR_REVIEWS,
     PROFILE: ROUTE_PATHS.VENDOR_PROFILE,
+    STORE: ROUTE_PATHS.VENDOR_STORE,
     PENDING: ROUTE_PATHS.VENDOR_PENDING,
   }),
   ADMIN: Object.freeze({
@@ -153,6 +174,13 @@ export const ROUTES = Object.freeze({
     ORDERS: ROUTE_PATHS.ADMIN_ORDERS,
     RETURNS: ROUTE_PATHS.ADMIN_RETURNS,
     REVIEWS: ROUTE_PATHS.ADMIN_REVIEWS,
+    PRODUCTS: ROUTE_PATHS.ADMIN_PRODUCTS,
+    BRANDS: ROUTE_PATHS.ADMIN_BRANDS,
+    BRAND_NEW: ROUTE_PATHS.ADMIN_BRAND_NEW,
+    BRAND_EDIT: ROUTE_PATHS.ADMIN_BRAND_EDIT,
+    CATEGORIES: ROUTE_PATHS.ADMIN_CATEGORIES,
+    CATEGORY_NEW: ROUTE_PATHS.ADMIN_CATEGORY_NEW,
+    CATEGORY_EDIT: ROUTE_PATHS.ADMIN_CATEGORY_EDIT,
   }),
   LEGAL: Object.freeze({
     TERMS: '/legal/terms',

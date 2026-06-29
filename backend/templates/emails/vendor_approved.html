@@ -1,0 +1,19 @@
+{# templates/emails/vendor_approved.html — sent when admin approves a vendor application. #}
+{# Rendered as a plain HTML body for Celery email tasks (Module 1).  #}
+{# Variables: vendor_name, store_name, dashboard_url #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Your PCCraft vendor application was approved</title>
+</head>
+<body>
+  <h1>Welcome to PCCraft Marketplace, {{ vendor_name }}!</h1>
+  <p>
+    Your vendor account for <strong>{{ store_name }}</strong> has been approved.
+    You can now sign in and start listing products from your vendor dashboard.
+  </p>
+  <p><a href="{{ dashboard_url }}">Go to your vendor dashboard</a></p>
+  <p>— The PCCraft team</p>
+</body>
+</html>

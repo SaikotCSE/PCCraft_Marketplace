@@ -1,0 +1,24 @@
+{# templates/emails/vendor_rejected.html — sent when admin rejects a vendor application. #}
+{# Variables: vendor_name, store_name, rejection_reason, support_url #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Your PCCraft vendor application needs attention</title>
+</head>
+<body>
+  <h1>Hello {{ vendor_name }},</h1>
+  <p>
+    Unfortunately your vendor application for <strong>{{ store_name }}</strong>
+    was not approved at this time.
+  </p>
+  <p><strong>Reason from the review team:</strong></p>
+  <blockquote>{{ rejection_reason }}</blockquote>
+  <p>
+    You can update your documents and resubmit from the vendor portal. If you
+    believe this decision was made in error, please contact support.
+  </p>
+  <p><a href="{{ support_url }}">Contact support</a></p>
+  <p>— The PCCraft team</p>
+</body>
+</html>

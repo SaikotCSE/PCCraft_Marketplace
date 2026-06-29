@@ -51,6 +51,23 @@ api.interceptors.request.use(
       config.headers['X-Session-Key'] = sessionKey;
     }
 
+    // Drop the default `Content-Type: application/json` when the body is a
+    // FormData instance. The browser's fetch/XHR will then set the correct
+    // `multipart/form-data; boundary=…` header on its own. Without this,
+    // every multipart upload would leave DRF's parser routing the request
+    // to JSONParser (which can't read files) instead of MultiPartParser —
+    // producing "The submitted data was not a file" on the backend.
+    if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+      if (typeof config.headers.delete === 'function') {
+        config.headers.delete('Content-Type');
+      } else {
+        // AxiosHeaders (v1) and plain object headers both support .delete
+        // in v1.18; fall back to deleting the property for older shapes.
+        delete config.headers['Content-Type'];
+        delete config.headers['content-type'];
+      }
+    }
+
     return config;
   },
   (error) => Promise.reject(error),

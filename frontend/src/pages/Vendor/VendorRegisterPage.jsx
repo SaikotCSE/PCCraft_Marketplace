@@ -41,10 +41,10 @@ import {
   vendorDocumentsSchema,
 } from '@utils/validators';
 import { ROUTES } from '@routes/routePaths';
-import FormField, { PasswordField } from '@components/auth/FormField';
-import PasswordStrength from '@components/auth/PasswordStrength';
-import Stepper from '@components/auth/Stepper';
-import FileUpload from '@components/auth/FileUpload';
+import FormField, { PasswordField } from '@components/common/FormField';
+import PasswordStrength from '@components/common/PasswordStrength';
+import Stepper from '@components/common/Stepper';
+import FileUpload from '@components/common/DocumentUpload';
 
 const STEP_SCHEMAS = [
   vendorAccountSchema,
@@ -57,7 +57,7 @@ const STEP_FIELDS = [
   ['owner_name', 'email', 'phone', 'password', 'confirm_password'],
   ['business_name', 'business_type', 'business_phone', 'trade_license_number'],
   ['street', 'city', 'district', 'postal_code'],
-  ['trade_license_doc', 'nid_number', 'nid_doc'],
+  ['trade_license_doc', 'nid_number', 'nid_doc', 'accept_vendor_terms'],
 ];
 
 const STEPS = [
@@ -98,6 +98,7 @@ export default function VendorRegisterPage() {
       trade_license_doc: null,
       nid_number: '',
       nid_doc: null,
+      accept_vendor_terms: false,
     }),
     []
   );
@@ -108,8 +109,18 @@ export default function VendorRegisterPage() {
     mode: 'onBlur',
   });
 
-  const { register, handleSubmit, trigger, getValues, formState, setError, watch } = form;
+  const { register, handleSubmit, trigger, getValues, formState, setError, setValue, watch } = form;
   const passwordValue = watch('password');
+
+  // RHF's `register` onChange path doesn't play well with custom dropzones —
+  // it reads the registered ref's `.files`, which is empty for drag-drop or
+  // programmatic updates. We bypass it for file inputs and use `setValue`
+  // directly so the file is stored in form state regardless of how it was
+  // picked.
+  const handleFileChange = (name, file) => {
+    if (!name) return;
+    setValue(name, file, { shouldValidate: true, shouldDirty: true });
+  };
 
   const goNext = async () => {
     const fields = STEP_FIELDS[step];
@@ -147,6 +158,9 @@ export default function VendorRegisterPage() {
     if (all.trade_license_doc) fd.append('trade_license_doc', all.trade_license_doc);
     fd.append('nid_number', all.nid_number);
     if (all.nid_doc) fd.append('nid_doc', all.nid_doc);
+    // Backend BooleanField on `accept_vendor_terms` — send 'true' / 'false'
+    // strings since FormData serialises as text.
+    fd.append('accept_vendor_terms', all.accept_vendor_terms ? 'true' : 'false');
 
     try {
       const result = await registerAction('vendor', fd);
@@ -156,10 +170,26 @@ export default function VendorRegisterPage() {
       const apiError = err.response?.data?.error;
       const fields = apiError?.details?.fields || apiError?.fields;
       if (fields && typeof fields === 'object') {
-        Object.entries(fields).forEach(([name, messages]) => {
+        const entries = Object.entries(fields);
+        entries.forEach(([name, messages]) => {
           const msg = Array.isArray(messages) ? messages[0] : String(messages);
           setError(name, { type: 'server', message: msg });
         });
+
+        // If any failing field isn't on the current step, jump back to the
+        // step that owns it so the inline error is actually visible to the
+        // user. Otherwise they'd be staring at a generic toast on Step 4
+        // while the real error is on Step 1's email field.
+        const failingField = entries[0][0];
+        const owningStep = STEP_FIELDS.findIndex((arr) => arr.includes(failingField));
+        if (owningStep !== -1 && owningStep !== step) {
+          setStep(owningStep);
+          toast.error(
+            `Please fix the highlighted field on step ${owningStep + 1}.`,
+          );
+        } else {
+          toast.error(entries[0][1][0] || 'Please fix the highlighted field.');
+        }
         return;
       }
       const message = apiError?.message || 'Application failed. Please try again.';
@@ -202,9 +232,8 @@ export default function VendorRegisterPage() {
                     error={formState.errors.owner_name?.message}
                     required
                     registration={register('owner_name')}
-                  >
-                    <User className="h-4 w-4 text-text-secondary" />
-                  </FormField>
+                    leadingIcon={<User className="h-4 w-4" />}
+                  />
 
                   <div className="grid gap-4 sm:grid-cols-2">
                     <FormField
@@ -214,9 +243,8 @@ export default function VendorRegisterPage() {
                       required
                       registration={register('email')}
                       autoComplete="email"
-                    >
-                      <Mail className="h-4 w-4 text-text-secondary" />
-                    </FormField>
+                      leadingIcon={<Mail className="h-4 w-4" />}
+                    />
 
                     <FormField
                       label="Phone"
@@ -226,9 +254,8 @@ export default function VendorRegisterPage() {
                       registration={register('phone')}
                       hint="Bangladesh number, e.g. +8801712345678"
                       autoComplete="tel"
-                    >
-                      <Phone className="h-4 w-4 text-text-secondary" />
-                    </FormField>
+                      leadingIcon={<Phone className="h-4 w-4" />}
+                    />
                   </div>
 
                   <PasswordField
@@ -257,9 +284,8 @@ export default function VendorRegisterPage() {
                     error={formState.errors.business_name?.message}
                     required
                     registration={register('business_name')}
-                  >
-                    <Store className="h-4 w-4 text-text-secondary" />
-                  </FormField>
+                    leadingIcon={<Store className="h-4 w-4" />}
+                  />
 
                   <FormField
                     label="Business type"
@@ -286,18 +312,16 @@ export default function VendorRegisterPage() {
                     registration={register('business_phone')}
                     hint="Bangladesh number, e.g. +8801712345678"
                     autoComplete="tel"
-                  >
-                    <Phone className="h-4 w-4 text-text-secondary" />
-                  </FormField>
+                    leadingIcon={<Phone className="h-4 w-4" />}
+                  />
 
                   <FormField
                     label="Trade license number"
                     error={formState.errors.trade_license_number?.message}
                     required
                     registration={register('trade_license_number')}
-                  >
-                    <Hash className="h-4 w-4 text-text-secondary" />
-                  </FormField>
+                    leadingIcon={<Hash className="h-4 w-4" />}
+                  />
                 </>
               )}
 
@@ -346,6 +370,7 @@ export default function VendorRegisterPage() {
                     error={formState.errors.trade_license_doc?.message}
                     hint="PDF, JPG, PNG, or WEBP — up to 5 MB"
                     registration={register('trade_license_doc')}
+                    onFileChange={handleFileChange}
                   />
                   <FormField
                     label="NID number"
@@ -353,21 +378,52 @@ export default function VendorRegisterPage() {
                     required
                     registration={register('nid_number')}
                     hint="National ID number of the business owner"
-                  >
-                    <Hash className="h-4 w-4 text-text-secondary" />
-                  </FormField>
+                    leadingIcon={<Hash className="h-4 w-4" />}
+                  />
                   <FileUpload
                     label="NID document"
                     required
                     error={formState.errors.nid_doc?.message}
                     hint="PDF, JPG, PNG, or WEBP — up to 5 MB"
                     registration={register('nid_doc')}
+                    onFileChange={handleFileChange}
                   />
                   <p className="rounded-md border border-surface-200 bg-surface-50 p-3 text-xs text-text-secondary">
                     <FileText className="mr-1 inline h-3.5 w-3.5" />
-                    By submitting, you confirm that all information provided is accurate and that you
-                    are authorised to operate this business in Bangladesh.
+                    Documents are reviewed within 2 business days. You&apos;ll receive an email once your
+                    application is approved.
                   </p>
+
+                  <label className="flex items-start gap-2 rounded-md border border-surface-200 bg-surface-100 px-3 py-2.5 text-sm text-text-secondary transition hover:border-accent-400 hover:bg-surface-50">
+                    <input
+                      type="checkbox"
+                      {...register('accept_vendor_terms')}
+                      className="mt-0.5 rounded border-surface-300 text-accent-500 focus:ring-accent-500"
+                    />
+                    <span>
+                      I confirm the information above is accurate and I&apos;m authorised to operate this
+                      business in Bangladesh. I agree to PCCraft&apos;s{' '}
+                      <Link
+                        to={ROUTES.LEGAL.TERMS}
+                        className="font-medium text-accent-500 hover:underline"
+                      >
+                        Vendor Terms
+                      </Link>{' '}
+                      and{' '}
+                      <Link
+                        to={ROUTES.LEGAL.PRIVACY}
+                        className="font-medium text-accent-500 hover:underline"
+                      >
+                        Privacy Policy
+                      </Link>
+                      .
+                    </span>
+                  </label>
+                  {formState.errors.accept_vendor_terms && (
+                    <p className="text-xs text-danger">
+                      {formState.errors.accept_vendor_terms.message}
+                    </p>
+                  )}
                 </>
               )}
             </motion.div>

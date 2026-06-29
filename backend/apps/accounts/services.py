@@ -259,3 +259,322 @@ class AuthService:
     # dispatched inline in ``register_vendor`` above. We keep the import
     # there lazy so module import stays cheap (and so a missing broker
     # never breaks registration -- the profile still goes to PENDING).
+
+
+# ====================================================================
+# Admin user & vendor moderation — Module 9
+# ====================================================================
+class UserAdminServiceError(Exception):
+    """Typed error for admin user moderation.
+
+    Views read ``exc.http_status`` to map a failure to a DRF response.
+    """
+
+    DEFAULT_HTTP_STATUS = 400
+
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        *,
+        fields: dict | None = None,
+        http_status: int | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.fields = fields or {}
+        self.http_status = http_status or self.DEFAULT_HTTP_STATUS
+
+
+class VendorAdminServiceError(Exception):
+    """Typed error for admin vendor moderation."""
+
+    DEFAULT_HTTP_STATUS = 400
+
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        *,
+        fields: dict | None = None,
+        http_status: int | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.fields = fields or {}
+        self.http_status = http_status or self.DEFAULT_HTTP_STATUS
+
+
+class UserAdminService:
+    """Business-logic for admin user moderation.
+
+    Per spec §Module 9 (lines 3119-3162):
+
+    * Admins can list users across roles.
+    * Suspend / activate / unlock / soft-delete / change-role all
+      require a ``reason`` (or ``role`` for change-role) and record an
+      audit entry.
+    * Admins cannot operate on themselves — self-action is refused
+      with ``code='self_action_forbidden'``.
+    """
+
+    @staticmethod
+    def list_users(*, search: str | None = None, role: str | None = None, status: str | None = None):
+        """Return a queryset of :class:`CustomUser`. Uses ``all_objects``
+        so admins see suspended / soft-deleted accounts too."""
+        qs = CustomUser.all_objects.all()
+        if role:
+            qs = qs.filter(role=role)
+        if status == "active":
+            qs = qs.filter(is_active=True)
+        elif status == "suspended":
+            qs = qs.filter(is_active=False)
+        if search:
+            term = search.strip()
+            if term:
+                qs = qs.filter(email__icontains=term)
+        return qs.order_by("-created_at")
+
+    @staticmethod
+    def get_user(user_id) -> CustomUser:
+        try:
+            return CustomUser.all_objects.get(pk=user_id)
+        except CustomUser.DoesNotExist as exc:
+            raise UserAdminServiceError(
+                "not_found",
+                "User not found.",
+                fields={"user_id": "No user with that id."},
+                http_status=404,
+            ) from exc
+
+    @staticmethod
+    def _ensure_not_self(actor, target):
+        if actor is not None and target.pk == actor.pk:
+            raise UserAdminServiceError(
+                "self_action_forbidden",
+                "You cannot perform this action on your own account.",
+                http_status=403,
+            )
+
+    @staticmethod
+    def _ensure_can_manage(actor, target):
+        """Refuse to demote or suspend a fellow admin unless the actor
+        is a superuser. Suspending another admin via this path is the
+        classic privilege-escalation mistake."""
+        UserAdminService._ensure_not_self(actor, target)
+        if target.role == UserRole.ADMIN and not getattr(actor, "is_superuser", False):
+            raise UserAdminServiceError(
+                "insufficient_privilege",
+                "Only a superuser can manage another admin account.",
+                http_status=403,
+            )
+
+    @staticmethod
+    @transaction.atomic
+    def suspend(*, actor, user_id, reason: str | None = None) -> CustomUser:
+        user = UserAdminService.get_user(user_id)
+        UserAdminService._ensure_can_manage(actor, user)
+        if user.is_active:
+            user.is_active = False
+            user.save(update_fields=["is_active", "updated_at"])
+        UserAdminService._audit(actor, "user.suspend", user, reason)
+        return user
+
+    @staticmethod
+    @transaction.atomic
+    def activate(*, actor, user_id, reason: str | None = None) -> CustomUser:
+        user = UserAdminService.get_user(user_id)
+        UserAdminService._ensure_not_self(actor, user)
+        if not user.is_active:
+            user.is_active = True
+            user.save(update_fields=["is_active", "updated_at"])
+        UserAdminService._audit(actor, "user.activate", user, reason)
+        return user
+
+    @staticmethod
+    @transaction.atomic
+    def unlock(*, actor, user_id, reason: str | None = None) -> CustomUser:
+        user = UserAdminService.get_user(user_id)
+        UserAdminService._ensure_not_self(actor, user)
+        user.is_locked = False
+        user.failed_login_attempts = 0
+        user.save(update_fields=[
+            "is_locked", "failed_login_attempts", "updated_at",
+        ])
+        UserAdminService._audit(actor, "user.unlock", user, reason)
+        return user
+
+    @staticmethod
+    @transaction.atomic
+    def change_role(*, actor, user_id, new_role: str, reason: str | None = None) -> CustomUser:
+        user = UserAdminService.get_user(user_id)
+        UserAdminService._ensure_can_manage(actor, user)
+        valid = {choice.value for choice in UserRole}
+        if new_role not in valid:
+            raise UserAdminServiceError(
+                "invalid_role",
+                "Unknown role: %s" % new_role,
+                fields={"role": "Invalid choice."},
+                http_status=400,
+            )
+        previous = user.role
+        if previous == new_role:
+            return user
+        user.role = new_role
+        user.save(update_fields=["role", "updated_at"])
+        UserAdminService._audit(
+            actor, "user.change_role", user, reason,
+            metadata={"from": previous, "to": new_role},
+        )
+        return user
+
+    @staticmethod
+    @transaction.atomic
+    def soft_delete(*, actor, user_id, reason: str | None = None) -> CustomUser:
+        user = UserAdminService.get_user(user_id)
+        UserAdminService._ensure_can_manage(actor, user)
+        if user.is_active:
+            user.soft_delete()
+        UserAdminService._audit(actor, "user.soft_delete", user, reason)
+        return user
+
+    @staticmethod
+    def _audit(actor, action: str, target, reason: str | None = None, metadata=None):
+        try:
+            from apps.common.audit import log_action  # type: ignore
+        except Exception:  # pragma: no cover
+            logger.warning("apps.common.audit not available; skipping audit for %s", action)
+            return
+        try:
+            log_action(
+                actor=actor,
+                action=action,
+                target=target,
+                reason=reason,
+                metadata=metadata,
+            )
+        except Exception:  # pragma: no cover
+            logger.exception("audit log failed for %s", action)
+
+
+class VendorAdminService:
+    """Business-logic for admin vendor moderation.
+
+    Per spec §Module 9 (lines 3119-3162): the workflow is::
+
+        PENDING -> APPROVED   (admin approves)
+        PENDING -> REJECTED   (admin rejects with a written reason)
+        PENDING -> INFO_REQUESTED  (admin asks for more info)
+
+    Approving flips ``approved_at`` + ``approved_by`` and activates the
+    vendor account so they can sign in.
+    """
+
+    @staticmethod
+    def list_vendors(*, status: str | None = None):
+        qs = VendorProfile.all_objects.select_related("user").all()
+        if status:
+            qs = qs.filter(status=status)
+        return qs.order_by("-created_at")
+
+    @staticmethod
+    def list_pending():
+        return VendorAdminService.list_vendors(status=VendorStatus.PENDING)
+
+    @staticmethod
+    def get_vendor(vendor_id) -> VendorProfile:
+        try:
+            return VendorProfile.all_objects.select_related("user").get(pk=vendor_id)
+        except VendorProfile.DoesNotExist as exc:
+            raise VendorAdminServiceError(
+                "not_found",
+                "Vendor application not found.",
+                fields={"vendor_id": "No vendor with that id."},
+                http_status=404,
+            ) from exc
+
+    @staticmethod
+    @transaction.atomic
+    def approve(*, actor, vendor_id, reason: str | None = None) -> VendorProfile:
+        vendor = VendorAdminService.get_vendor(vendor_id)
+        if vendor.status == VendorStatus.APPROVED:
+            return vendor
+        if vendor.status == VendorStatus.REJECTED:
+            raise VendorAdminServiceError(
+                "invalid_status",
+                "A rejected vendor must re-submit before being approved again.",
+                http_status=400,
+            )
+        from django.utils import timezone
+        vendor.status = VendorStatus.APPROVED
+        vendor.approved_at = timezone.now()
+        vendor.approved_by = actor
+        vendor.rejection_reason = ""
+        vendor.save(update_fields=[
+            "status", "approved_at", "approved_by",
+            "rejection_reason", "updated_at",
+        ])
+        # Activate the underlying user so the vendor can sign in.
+        user = vendor.user
+        if not user.is_active:
+            user.is_active = True
+            user.save(update_fields=["is_active", "updated_at"])
+        UserAdminService._audit(
+            actor, "vendor.approve", vendor, reason,
+        )
+        return vendor
+
+    @staticmethod
+    @transaction.atomic
+    def reject(*, actor, vendor_id, reason: str | None = None) -> VendorProfile:
+        vendor = VendorAdminService.get_vendor(vendor_id)
+        if not reason or not reason.strip():
+            raise VendorAdminServiceError(
+                "reason_required",
+                "A rejection reason is required.",
+                fields={"reason": "This field is required."},
+                http_status=400,
+            )
+        if vendor.status == VendorStatus.REJECTED:
+            return vendor
+        vendor.status = VendorStatus.REJECTED
+        vendor.rejection_reason = reason.strip()
+        vendor.approved_at = None
+        vendor.approved_by = None
+        vendor.save(update_fields=[
+            "status", "rejection_reason",
+            "approved_at", "approved_by", "updated_at",
+        ])
+        UserAdminService._audit(
+            actor, "vendor.reject", vendor, reason,
+        )
+        return vendor
+
+    @staticmethod
+    @transaction.atomic
+    def request_info(*, actor, vendor_id, message: str | None = None) -> VendorProfile:
+        vendor = VendorAdminService.get_vendor(vendor_id)
+        if not message or not message.strip():
+            raise VendorAdminServiceError(
+                "message_required",
+                "An info-request message is required.",
+                fields={"message": "This field is required."},
+                http_status=400,
+            )
+        if vendor.status == VendorStatus.APPROVED:
+            raise VendorAdminServiceError(
+                "invalid_status",
+                "Cannot request info from an already-approved vendor.",
+                http_status=400,
+            )
+        vendor.status = VendorStatus.INFO_REQUESTED
+        vendor.rejection_reason = message.strip()
+        vendor.save(update_fields=[
+            "status", "rejection_reason", "updated_at",
+        ])
+        UserAdminService._audit(
+            actor, "vendor.request_info", vendor, message,
+        )
+        return vendor

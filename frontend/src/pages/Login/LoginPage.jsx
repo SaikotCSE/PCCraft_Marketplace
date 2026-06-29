@@ -20,8 +20,8 @@ import { Mail, Lock, ArrowLeft, LogIn } from 'lucide-react';
 import useAuthStore from '@context/useAuthStore';
 import { loginSchema } from '@utils/validators';
 import { ROUTES } from '@routes/routePaths';
-import FormField, { PasswordField } from '@components/auth/FormField';
-import RoleCard from '@components/auth/RoleCard';
+import FormField, { PasswordField } from '@components/common/FormField';
+import RoleCard from '@components/common/RoleCard';
 import { cn } from '@utils/cn';
 
 const ROLE_OPTIONS = [
@@ -61,19 +61,31 @@ export default function LoginPage() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const role = useAuthStore((s) => s.role);
 
+  // If the user was redirected here from the registration page, show
+  // the backend's "please sign in" message so they know what to do next.
+  const registrationMessage = location.state?.registrationMessage;
+
   const [phase, setPhase] = useState('select');
   const [selectedRole, setSelectedRole] = useState(null);
 
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors, isSubmitting },
     setError,
     reset,
   } = useForm({
     resolver: zodResolver(loginSchema),
-    defaultValues: { email: '', password: '' },
+    defaultValues: { email: '', password: '', role: 'customer' },
   });
+
+  // Keep RHF's hidden `role` field in sync with the role-card the user
+  // picked on phase 1. The schema validates `role`, the API requires
+  // it, and the user never types it — so we own it here.
+  useEffect(() => {
+    if (selectedRole) setValue('role', selectedRole, { shouldValidate: false });
+  }, [selectedRole, setValue]);
 
   // If an already-logged-in user lands here, bounce to their home.
   useEffect(() => {
@@ -97,7 +109,9 @@ export default function LoginPage() {
 
   const onSubmit = async (values) => {
     try {
-      const user = await login({ ...values, role: selectedRole });
+      // RHF holds `role` (synced from `selectedRole` above), so we pass
+      // the form values through as-is.
+      const user = await login({ ...values, role: values.role || selectedRole });
       toast.success(`Welcome back, ${user?.full_name || 'friend'}!`);
       const target = location.state?.from || ROLE_HOME[user.role] || ROUTES.HOME;
       navigate(target, { replace: true });
@@ -124,12 +138,12 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-surface-50 px-4 py-12">
+    <div className="flex min-h-screen items-center justify-center bg-surface-200 px-4 py-12">
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.25 }}
-        className="w-full max-w-2xl rounded-md border border-surface-200 bg-white p-8 shadow-sm"
+        className="w-full max-w-2xl rounded-md border border-surface-300 bg-white p-8 shadow-md"
       >
         <div className="mb-6 text-center">
           <Link to={ROUTES.HOME} className="text-sm text-text-secondary hover:text-accent-500">
@@ -144,6 +158,15 @@ export default function LoginPage() {
         </div>
 
         <AnimatePresence mode="wait">
+          {registrationMessage && phase === 'select' ? (
+            <div
+              role="status"
+              className="mb-4 rounded-md border border-success/30 bg-success/5 px-3 py-2 text-sm text-success"
+            >
+              {registrationMessage}
+            </div>
+          ) : null}
+
           {phase === 'select' ? (
             <motion.div
               key="select"
@@ -190,12 +213,21 @@ export default function LoginPage() {
 
               <FormField
                 label="Email address"
+                type="email"
                 error={errors.email?.message}
                 required
                 registration={register('email')}
-              >
-                <Mail className="h-4 w-4 text-text-secondary" />
-              </FormField>
+                autoComplete="email"
+                placeholder="you@example.com"
+                leadingIcon={<Mail className="h-4 w-4" />}
+              />
+
+              {/*
+                Hidden `role` so the zodResolver sees a complete payload
+                (loginSchema requires role). The user picks the role on
+                phase 1; we mirror it into the form via setValue above.
+              */}
+              <input type="hidden" {...register('role')} value={selectedRole || ''} />
 
               <PasswordField
                 label="Password"

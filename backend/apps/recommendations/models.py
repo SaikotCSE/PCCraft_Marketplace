@@ -72,3 +72,59 @@ class ProductView(TimeStampedModel):
     def __str__(self) -> str:  # pragma: no cover -- debug aid
         who = f"user={self.user_id}" if self.user_id else f"session={self.session_key}"
         return f"ProductView(product={self.product_id}, {who} @ {self.viewed_at.isoformat()})"
+
+
+class SearchLog(models.Model):
+    """One row per search query (Module 11 spec §11.1).
+
+    Captured by :mod:`apps.recommendations.services.SearchLogService`
+    either inline (fast paths) or via Celery. Used by analytics to
+    monitor high-traffic queries, zero-result queries, and per-vendor
+    search interest.
+
+    * ``user`` is null for anonymous searches.
+    * ``results_count`` is recorded at log time, not derived later.
+    * ``timestamp`` is the wall-clock time of the request -- this is a
+      raw event log, not a TimeStampedModel.
+    """
+
+    id = models.BigAutoField(primary_key=True)
+    query = models.CharField(
+        max_length=255,
+        db_index=True,
+        help_text="The exact search string (post-trim, pre-lowercasing for storage).",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="search_logs",
+        help_text="Null for anonymous searches.",
+    )
+    results_count = models.IntegerField(
+        default=0,
+        help_text="Number of products that matched at log time.",
+    )
+    timestamp = models.DateTimeField(
+        auto_now_add=True,
+        db_index=True,
+        help_text="When the query was made.",
+    )
+
+    class Meta:
+        verbose_name = "Search log"
+        verbose_name_plural = "Search logs"
+        ordering = ("-timestamp",)
+        indexes = [
+            # Trending-queries report.
+            models.Index(fields=("query", "-timestamp")),
+            # Per-user search history (admin audit + auth debugging).
+            models.Index(fields=("user", "-timestamp")),
+            # Zero-result monitoring.
+            models.Index(fields=("results_count", "-timestamp")),
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover -- debug aid
+        who = f"user={self.user_id}" if self.user_id else "anon"
+        return f"SearchLog<{self.query!r} {self.results_count}h {who} @ {self.timestamp.isoformat()}>"

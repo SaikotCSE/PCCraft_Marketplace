@@ -28,6 +28,7 @@ import logging
 from django.db.models import F, Q, Sum
 from django.utils import timezone
 from rest_framework import mixins, status, viewsets
+from rest_framework.views import APIView
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
@@ -35,17 +36,25 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from apps.common.permissions import IsApprovedVendor
+from apps.common.pagination import StandardResultsPagination
+from apps.common.permissions import IsAdmin, IsApprovedVendor
 from apps.common.response import api_response
 from apps.products.filters import ProductFilter
 from apps.products.models import Product, ProductStatus
 from apps.products.serializers import (
+    AdminProductListSerializer,
+    AdminProductModerateSerializer,
     ProductDetailSerializer,
     ProductListSerializer,
     ProductUpdateSerializer,
     ProductWriteSerializer,
 )
-from apps.products.services import ProductService, ProductServiceError
+from apps.products.services import (
+    AdminProductService,
+    AdminProductServiceError,
+    ProductService,
+    ProductServiceError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -354,4 +363,214 @@ class VendorProductViewSet(viewsets.ModelViewSet):
         return api_response(
             status=code_to_status.get(exc.code, status.HTTP_400_BAD_REQUEST),
             error={"code": exc.code, "message": exc.message, "fields": exc.fields or {}},
+        )
+
+
+# ====================================================================
+# Module 9 — admin product moderation
+# ====================================================================
+def _admin_product_error(exc) -> Response:
+    return api_response(
+        status=exc.http_status,
+        error={
+            "code": exc.code,
+            "message": exc.message,
+            "fields": exc.fields or {},
+        },
+    )
+
+
+class AdminProductListView(APIView):
+    """``GET /api/v1/admin/products/`` -- paginated admin product list."""
+
+    permission_classes = (IsAuthenticated, IsAdmin)
+    pagination_class = StandardResultsPagination
+
+    def get(self, request: Request) -> Response:
+        qs = AdminProductService.list_products(
+            status=request.query_params.get("status", ""),
+            vendor_id=request.query_params.get("vendor_id", ""),
+            search=request.query_params.get("search", ""),
+            ordering=request.query_params.get("ordering") or "-created_at",
+        )
+        paginator = StandardResultsPagination()
+        page = paginator.paginate_queryset(qs, request, view=self)
+        data = AdminProductListSerializer(
+            page if page is not None else qs,
+            many=True,
+            context={"request": request},
+        ).data
+        if page is not None:
+            return paginator.get_paginated_response(data)
+        return api_response(data=data)
+
+
+class AdminProductDetailOrDeleteView(APIView):
+    """``GET / DELETE /api/v1/admin/products/{id}/``."""
+
+    permission_classes = (IsAuthenticated, IsAdmin)
+
+    def get(self, request: Request, product_id) -> Response:
+        try:
+            product = AdminProductService.get_product(product_id)
+        except AdminProductServiceError as exc:
+            return _admin_product_error(exc)
+        # Reuse the public detail serializer for full payload.
+        from apps.products.serializers import ProductDetailSerializer
+
+        return api_response(
+            data=ProductDetailSerializer(
+                product, context={"request": request}
+            ).data
+        )
+
+    def delete(self, request: Request, product_id) -> Response:
+        reason = (
+            (request.data or {}).get("reason", "")
+            if isinstance(request.data, dict)
+            else ""
+        )
+        try:
+            product = AdminProductService.soft_delete(
+                actor=request.user, product_id=product_id, reason=reason
+            )
+        except AdminProductServiceError as exc:
+            return _admin_product_error(exc)
+        return api_response(
+            data=AdminProductListSerializer(
+                product, context={"request": request}
+            ).data,
+            message="Product archived.",
+        )
+
+
+class AdminProductModerateView(APIView):
+    """``PATCH /api/v1/admin/products/{id}/moderate/`` -- status flip.
+
+    Allows admins to move a product through any ``ProductStatus`` value
+    (draft → published → archived → suspended, etc.), which is broader than
+    the binary hide/restore surface in ``/hide/`` and ``/restore/``.
+    """
+
+    permission_classes = (IsAuthenticated, IsAdmin)
+    parser_classes = (JSONParser, FormParser)
+
+    def patch(self, request: Request, product_id) -> Response:
+        serializer = AdminProductModerateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            product = AdminProductService.moderate_status(
+                actor=request.user,
+                product_id=product_id,
+                new_status=serializer.validated_data["status"],
+                reason=serializer.validated_data.get("reason", ""),
+            )
+        except AdminProductServiceError as exc:
+            return _admin_product_error(exc)
+        return api_response(
+            data=AdminProductListSerializer(
+                product, context={"request": request}
+            ).data,
+            message="Product status updated.",
+        )
+
+
+# ====================================================================
+# Module 9 — slug-keyed product moderation (per spec §3166-3172)
+# ====================================================================
+class _SlugProductActionView(APIView):
+    """Shared base for slug-keyed admin product actions.
+
+    The spec writes these endpoints as ``/admin/products/{slug}/hide/``,
+    ``/admin/products/{slug}/restore/`` and ``DELETE
+    /admin/products/{slug}/`` — distinct from the existing UUID-keyed
+    ``/moderate/`` endpoint so the React admin UI can address products
+    by their public slug (the field rendered in the table) without
+    needing to surface the UUID.
+    """
+
+    permission_classes = (IsAuthenticated, IsAdmin)
+    parser_classes = (JSONParser, FormParser)
+
+    @staticmethod
+    def _reason(request) -> str:
+        if not isinstance(request.data, dict):
+            return ""
+        return (request.data.get("reason") or "").strip()
+
+    def _by_slug(self, slug: str):
+        return AdminProductService.get_product_by_slug(slug)
+
+
+class AdminProductHideView(_SlugProductActionView):
+    """``PATCH /api/v1/admin/products/{slug}/hide/`` — set status=HIDDEN.
+
+    Body (optional): ``{"reason": "..."}`` recorded in the audit log.
+    Idempotent: a product already HIDDEN returns the current row without
+    rewriting the audit log twice.
+    """
+
+    def patch(self, request: Request, slug: str) -> Response:
+        try:
+            product = AdminProductService.hide(
+                actor=request.user,
+                product_id=AdminProductService.get_product_by_slug(slug).pk,
+                reason=self._reason(request),
+            )
+        except AdminProductServiceError as exc:
+            return _admin_product_error(exc)
+        return api_response(
+            data=AdminProductListSerializer(
+                product, context={"request": request}
+            ).data,
+            message="Product hidden.",
+        )
+
+
+class AdminProductRestoreView(_SlugProductActionView):
+    """``PATCH /api/v1/admin/products/{slug}/restore/`` — set status=ACTIVE.
+
+    Body (optional): ``{"reason": "..."}`` recorded in the audit log.
+    """
+
+    def patch(self, request: Request, slug: str) -> Response:
+        try:
+            product = AdminProductService.restore(
+                actor=request.user,
+                product_id=AdminProductService.get_product_by_slug(slug).pk,
+                reason=self._reason(request),
+            )
+        except AdminProductServiceError as exc:
+            return _admin_product_error(exc)
+        return api_response(
+            data=AdminProductListSerializer(
+                product, context={"request": request}
+            ).data,
+            message="Product restored.",
+        )
+
+
+class AdminProductHardDeleteView(_SlugProductActionView):
+    """``DELETE /api/v1/admin/products/{slug}/`` — permanent removal.
+
+    Distinct from the UUID-keyed DELETE which performs a *soft* delete
+    (archive). The slug-keyed variant honors the spec line 3171
+    "(hard delete — requires admin confirmation)" and is gated behind
+    the page's confirm dialog.
+
+    Body (optional): ``{"reason": "..."}`` recorded in the audit log.
+    """
+
+    def delete(self, request: Request, slug: str) -> Response:
+        try:
+            snapshot = AdminProductService.hard_delete(
+                actor=request.user,
+                product_id=AdminProductService.get_product_by_slug(slug).pk,
+                reason=self._reason(request),
+            )
+        except AdminProductServiceError as exc:
+            return _admin_product_error(exc)
+        return api_response(
+            data=snapshot,
+            message="Product permanently deleted.",
         )

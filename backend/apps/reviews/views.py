@@ -519,7 +519,7 @@ class AdminReviewViewSet(viewsets.GenericViewSet):
             message=("Review hidden." if is_hidden else "Review restored."),
         )
 
-    @action(detail=True, methods=("post",), url_path="hide")
+    @action(detail=True, methods=("patch",), url_path="hide")
     def hide(self, request: Request, *args, **kwargs) -> Response:
         try:
             review = ReviewService.hide_review(
@@ -534,7 +534,7 @@ class AdminReviewViewSet(viewsets.GenericViewSet):
             message="Review hidden.",
         )
 
-    @action(detail=True, methods=("post",), url_path="restore")
+    @action(detail=True, methods=("patch",), url_path="restore")
     def restore(self, request: Request, *args, **kwargs) -> Response:
         try:
             review = ReviewService.restore_review(review_id=kwargs.get("pk"))

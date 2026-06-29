@@ -390,7 +390,13 @@ class ReturnRequestSerializer(serializers.ModelSerializer):
     def get_customer_name(self, obj: ReturnRequest):
         if obj.customer_id:
             full = (obj.customer.full_name or "").strip()
-            return full or obj.customer.username
+            # Auth is email-based (Module 1) -- ``CustomUser`` has no
+            # ``username`` column. Fall back to the email prefix when the
+            # customer has not supplied a full name yet.
+            if full:
+                return full
+            email = obj.customer.email or ""
+            return email.split("@", 1)[0] if email else ""
         return ""
 
     def get_customer_email(self, obj: ReturnRequest):

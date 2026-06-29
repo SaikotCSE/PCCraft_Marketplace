@@ -74,6 +74,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "apps.common.security.SecurityHeadersMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -184,6 +185,10 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "anon": "100/hour",
         "user": "1000/hour",
+        # Spec Module 12 overrides: auth endpoints get tighter limits
+        # via ``LoginRateThrottle`` and ``RegisterRateThrottle``.
+        "login": "30/hour",
+        "register": "10/hour",
     },
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_PARSER_CONTEXT": {"request": None},
@@ -276,16 +281,31 @@ DEFAULT_FILE_STORAGE = config("DEFAULT_FILE_STORAGE", default="django.core.files
 # ─────────────────────────────────────────────────────────────────
 # Email
 # ─────────────────────────────────────────────────────────────────
+# Production default is the real SMTP backend so OTP emails actually
+# leave the box. For pure offline dev (no .env overrides), set
+# EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend in
+# your local .env to print OTPs to the runserver log instead.
 EMAIL_BACKEND = config(
     "EMAIL_BACKEND",
-    default="django.core.mail.backends.console.EmailBackend",
+    default="django.core.mail.backends.smtp.EmailBackend",
 )
-EMAIL_HOST = config("EMAIL_HOST", default="localhost")
+EMAIL_HOST = config("EMAIL_HOST", default="smtp.gmail.com")
 EMAIL_PORT = config("EMAIL_PORT", default=587, cast=int)
-EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="")
-EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
-EMAIL_USE_TLS = True
-DEFAULT_FROM_EMAIL = config("EMAIL_FROM", default="no-reply@pccraft.local")
+EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="saikot.cse22@gmail.com")
+EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="xweg bljv xdbh tqmf")
+# Port-driven TLS: 465 uses implicit TLS (SMTP_SSL), 587 uses STARTTLS
+# (TLS upgrade after EHLO). Lets us swap Gmail (587) and Resend (465)
+# without touching this file. The localhost guard used to silently
+# disable STARTTLS for any host literally named "localhost" -- which
+# also broke Gmail if EMAIL_HOST was unset. Now STARTTLS is on whenever
+# the backend is SMTP, the host is non-empty, and we're not on 465.
+EMAIL_USE_SSL = EMAIL_PORT == 465
+EMAIL_USE_TLS = (
+    EMAIL_BACKEND.endswith("smtp.EmailBackend")
+    and EMAIL_PORT != 465
+    and bool(EMAIL_HOST)
+)
+DEFAULT_FROM_EMAIL = config("EMAIL_FROM", default="saikot.cse22@gmail.com")
 
 # ─────────────────────────────────────────────────────────────────
 # Logging

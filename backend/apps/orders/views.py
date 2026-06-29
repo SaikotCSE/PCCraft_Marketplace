@@ -69,18 +69,33 @@ from apps.orders.serializers import (
 from apps.orders.services import (
     AddressService,
     MAX_RETURN_EVIDENCE,
+    OrderAdminService,
+    OrderAdminServiceError,
     OrderService,
+    ReturnAdminService,
     ReturnService,
 )
 
 logger = logging.getLogger(__name__)
 
 
-def _bad_request(code: str, message: str, fields: dict | None = None) -> "Response":
+def _bad_request(
+    code: str,
+    message: str,
+    fields: dict | None = None,
+    *,
+    status: int = drf_status.HTTP_400_BAD_REQUEST,
+) -> "Response":
+    """Return a typed-error envelope.
+
+    ``status`` defaults to 400 for validation errors but callers may pass
+    404 (resource missing) or 409 (conflict) etc. -- keeping the
+    overload option visible at the call site keeps the helper generic.
+    """
     error = {"code": code, "message": message}
     if fields:
         error["fields"] = fields
-    return api_response(status=drf_status.HTTP_400_BAD_REQUEST, error=error)
+    return api_response(status=status, error=error)
 
 
 def _service_error(exc: ValidationError):
@@ -743,12 +758,13 @@ class AdminReturnProcessRefundView(APIView):
                 serializer.errors,
             )
         try:
-            ret = ReturnService.process_refund(
-                request.user, return_id,
+            ret = ReturnAdminService.process_refund(
+                actor=request.user,
+                return_id=return_id,
                 admin_notes=serializer.validated_data.get("admin_notes", ""),
             )
-        except ValidationError as exc:
-            return _service_error(exc)
+        except OrderAdminServiceError as exc:
+            return _bad_request(exc.code, exc.message, exc.fields or None)
         return api_response(
             data=ReturnRequestSerializer(ret, context={"request": request}).data,
             status=drf_status.HTTP_200_OK,
@@ -769,13 +785,71 @@ class AdminReturnConfirmRefundView(APIView):
                 serializer.errors,
             )
         try:
-            ret = ReturnService.confirm_refund(
-                request.user, return_id,
+            ret = ReturnAdminService.confirm_refund(
+                actor=request.user,
+                return_id=return_id,
                 admin_notes=serializer.validated_data.get("admin_notes", ""),
             )
-        except ValidationError as exc:
-            return _service_error(exc)
+        except OrderAdminServiceError as exc:
+            return _bad_request(exc.code, exc.message, exc.fields or None)
         return api_response(
             data=ReturnRequestSerializer(ret, context={"request": request}).data,
+            status=drf_status.HTTP_200_OK,
+        )
+
+
+# ===========================================================================
+# Module 9 -- Admin order endpoints (read-only list + detail)
+# ===========================================================================
+class AdminOrderListView(APIView):
+    """``GET /api/v1/admin/orders/`` -- paginated order list with filters.
+
+    Filters per spec: ``status``, ``date_from``, ``date_to``, ``vendor``
+    (vendor profile id), ``search`` (order_number or customer email).
+    """
+
+    permission_classes = (IsAuthenticated, IsAdmin)
+
+    def get(self, request, *args, **kwargs):
+        try:
+            qs = OrderAdminService.list_orders(
+                status=request.query_params.get("status", ""),
+                date_from=request.query_params.get("date_from", ""),
+                date_to=request.query_params.get("date_to", ""),
+                vendor=request.query_params.get("vendor", ""),
+                search=request.query_params.get("search", ""),
+                ordering=request.query_params.get("ordering", "-created_at"),
+            )
+        except (ValueError, TypeError) as exc:
+            return _bad_request(
+                "validation_error",
+                "One or more filter values are invalid.",
+                fields={"detail": str(exc)},
+            )
+
+        paginator = StandardResultsPagination()
+        page = paginator.paginate_queryset(qs, request, view=self)
+        data = OrderSerializer(page if page is not None else qs, many=True).data
+        if page is not None:
+            return paginator.get_paginated_response(data)
+        return api_response(data=data, status=drf_status.HTTP_200_OK)
+
+
+class AdminOrderDetailView(APIView):
+    """``GET /api/v1/admin/orders/{order_number}/`` -- full read-only detail."""
+
+    permission_classes = (IsAuthenticated, IsAdmin)
+
+    def get(self, request, order_number, *args, **kwargs):
+        try:
+            order = OrderAdminService.get_order_by_number(order_number)
+        except OrderAdminServiceError as exc:
+            # 404 (resource missing) must surface as 404, not 400.
+            return _bad_request(
+                exc.code, exc.message, exc.fields or None,
+                status=exc.http_status,
+            )
+        return api_response(
+            data=OrderSerializer(order).data,
             status=drf_status.HTTP_200_OK,
         )

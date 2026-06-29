@@ -1,0 +1,27 @@
+/* animations.css — custom keyframes that complement Framer Motion.
+ *
+ * Spec §1.3 lists this as a sibling of globals.css. Most animation in the
+ * app goes through Framer Motion (variants + AnimatePresence). This file
+ * exists for the few cases where a pure CSS keyframe is simpler — e.g.
+ * skeleton shimmer, spinner rotation, hover pulse on badges.
+ *
+ * Anything defined here can be consumed in components via Tailwind
+ * arbitrary values:  className="animate-pccraft-fade-in"
+ */
+
+/* Used by Skeleton shimmer when Tailwind's built-in pulse is too generic. */
+@keyframes pccraft-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Used by Spinner when we don't want to pull in an icon library. */
+@keyframes pccraft-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Soft fade-in for new content (cart drawer, toast). */
+@keyframes pccraft-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}

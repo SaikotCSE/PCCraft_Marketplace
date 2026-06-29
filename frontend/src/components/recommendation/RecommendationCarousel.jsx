@@ -216,7 +216,7 @@ const RecommendationCarousel = ({
                 type="button"
                 onClick={() => scrollByPage(-1)}
                 aria-label="Scroll left"
-                className="absolute -left-3 top-1/2 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-surface text-text-secondary shadow-md transition hover:bg-bg-muted md:flex"
+                className="absolute left-2 top-1/2 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-surface text-text-secondary shadow-md transition hover:bg-bg-muted md:flex"
               >
                 <ChevronLeft className="h-5 w-5" />
               </button>
@@ -226,7 +226,7 @@ const RecommendationCarousel = ({
                 type="button"
                 onClick={() => scrollByPage(1)}
                 aria-label="Scroll right"
-                className="absolute -right-3 top-1/2 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-surface text-text-secondary shadow-md transition hover:bg-bg-muted md:flex"
+                className="absolute right-2 top-1/2 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-surface text-text-secondary shadow-md transition hover:bg-bg-muted md:flex"
               >
                 <ChevronRight className="h-5 w-5" />
               </button>

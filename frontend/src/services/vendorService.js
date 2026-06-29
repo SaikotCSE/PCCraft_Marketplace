@@ -12,6 +12,17 @@ export const vendorService = {
   myOrders: (params) => api.get('/orders/vendor/', { params }).then(unwrap),
   myDashboard: () => api.get('/dashboard/vendor/').then(unwrap),
 
+  // ---- Module 10 — vendor dashboard analytics ----
+  // Backend mounts these at /api/v1/vendor/dashboard/* (apps/dashboard/vendor_analytics_urls.py).
+  dashboardOverview: () =>
+    api.get('/vendor/dashboard/overview/').then(unwrap),
+  dashboardRevenueOverTime: (params = {}) =>
+    api.get('/vendor/dashboard/revenue-over-time/', { params }).then(unwrap),
+  dashboardTopProducts: (params = {}) =>
+    api.get('/vendor/dashboard/top-products/', { params }).then(unwrap),
+  dashboardLowStock: () =>
+    api.get('/vendor/dashboard/low-stock/').then(unwrap),
+
   // ---- vendor product writes ----
   createProduct: (payload) => api.post('/vendor/products/', payload).then(unwrap),
   updateProduct: (slug, payload) => api.patch(`/vendor/products/${slug}/`, payload).then(unwrap),

@@ -16,7 +16,7 @@ import ImageGallery from '@/components/products/ImageGallery';
 import PriceDisplay from '@/components/products/PriceDisplay';
 import StockBadge from '@/components/products/StockBadge';
 import ProductSpecsTable from '@/components/products/ProductSpecsTable';
-import ReviewsList from '@/components/reviews/ReviewsList';
+import ReviewsList from '@/components/products/ReviewsList';
 import RecommendationCarousel from '@components/recommendation/RecommendationCarousel';
 import { productService } from '@/services/productService';
 import { recommendationService } from '@services/recommendationService';

@@ -1,0 +1,22 @@
+{# templates/emails/order_confirmed.html — sent right after a customer places an order. #}
+{# Variables: customer_name, order_number, total_amount, order_url #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Order #{{ order_number }} confirmed</title>
+</head>
+<body>
+  <h1>Thanks for your order, {{ customer_name }}!</h1>
+  <p>
+    Your order <strong>#{{ order_number }}</strong> has been received and is
+    being processed. Total charged: {{ total_amount }}.
+  </p>
+  <p>
+    We'll send you another email when your items ship. You can track the
+    status of this order at any time from your account.
+  </p>
+  <p><a href="{{ order_url }}">View order details</a></p>
+  <p>— The PCCraft team</p>
+</body>
+</html>

@@ -161,11 +161,20 @@ class CustomerRegisterSerializer(serializers.Serializer):
 
     def validate_email(self, value: str) -> str:
         email = value.strip().lower()
-        if User.objects.filter(email__iexact=email).exists():
-            raise serializers.ValidationError(
-                "An account with this email already exists.",
-                code="email_taken",
-            )
+        # Use ``all_objects`` (not ``User.objects``) so unverified rows
+        # are visible. The service layer (``AuthService.register_customer``)
+        # decides whether to overwrite (unverified) or reject (verified).
+        # Defaulting to the active-only manager here would mask the
+        # upsert path and surface false "email_taken" errors to the
+        # frontend for any half-provisioned row.
+        if User.all_objects.filter(email__iexact=email).exists():
+            row = User.all_objects.get(email__iexact=email)
+            if row.is_verified:
+                raise serializers.ValidationError(
+                    "An account with this email already exists.",
+                    code="email_taken",
+                )
+            # Unverified -- service layer will overwrite & re-issue OTP.
         return email
 
     def validate_password(self, value: str) -> str:
@@ -498,3 +507,193 @@ class JWTClaimsSerializer(TokenObtainPairSerializer):
         token["full_name"] = getattr(user, "full_name", "")
         token["is_verified"] = getattr(user, "is_verified", False)
         return token
+
+
+# ====================================================================
+# Module 9 — Admin user management
+# ====================================================================
+class AdminUserSerializer(serializers.ModelSerializer):
+    """Admin-facing user serializer.
+
+    Surfaces every field the admin Users page needs (including the
+    lockout counters and ``is_locked`` flag from Module 9 security).
+    Sensitive fields (password hash) are intentionally not exposed.
+    """
+
+    is_locked = serializers.BooleanField(read_only=True)
+    failed_login_attempts = serializers.IntegerField(read_only=True)
+    last_failed_login = serializers.DateTimeField(read_only=True)
+    vendor_status = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CustomUser
+        fields = (
+            "id",
+            "email",
+            "full_name",
+            "phone",
+            "role",
+            "is_active",
+            "is_staff",
+            "is_locked",
+            "failed_login_attempts",
+            "last_failed_login",
+            "date_joined",
+            "last_login",
+            "vendor_status",
+        )
+        read_only_fields = fields
+
+    def get_vendor_status(self, obj: CustomUser):
+        profile = getattr(obj, "vendor_profile", None)
+        return profile.status if profile is not None else None
+
+
+class AdminUserRoleChangeSerializer(serializers.Serializer):
+    """Body for ``PATCH /admin/users/{id}/change-role/``."""
+
+    role = serializers.ChoiceField(choices=[r.value for r in UserRole])
+
+
+# ====================================================================
+# Module 9 — admin vendor approval queue
+# ====================================================================
+class AdminVendorApplicationSerializer(serializers.ModelSerializer):
+    """Vendor application row for ``GET /admin/vendors/`` + pending list.
+
+    Read-only. Combines VendorProfile fields with the vendor user's
+    account info (joined via select_related in the view).
+    """
+
+    vendor_id = serializers.UUIDField(source="pk", read_only=True)
+    user_id = serializers.UUIDField(read_only=True)
+    email = serializers.EmailField(source="user.email", read_only=True)
+    full_name = serializers.CharField(source="user.full_name", read_only=True)
+    phone = serializers.CharField(source="user.phone", read_only=True)
+    is_user_active = serializers.BooleanField(source="user.is_active", read_only=True)
+    status = serializers.CharField(read_only=True)
+    business_type = serializers.CharField(read_only=True)
+    rejection_reason = serializers.CharField(read_only=True, allow_blank=True)
+    approved_at = serializers.DateTimeField(read_only=True)
+    approved_by = serializers.SerializerMethodField()
+    created_at = serializers.DateTimeField(read_only=True)
+    updated_at = serializers.DateTimeField(read_only=True)
+
+    class Meta:
+        model = VendorProfile
+        fields = (
+            "vendor_id",
+            "user_id",
+            "email",
+            "full_name",
+            "phone",
+            "is_user_active",
+            "status",
+            "business_name",
+            "business_type",
+            "trade_license_number",
+            "business_address",
+            "store_name",
+            "store_slug",
+            "store_description",
+            "store_contact_email",
+            "rejection_reason",
+            "approved_at",
+            "approved_by",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = fields
+
+    def get_approved_by(self, obj: VendorProfile):
+        return str(obj.approved_by_id) if obj.approved_by_id else None
+
+
+class AdminVendorRejectSerializer(serializers.Serializer):
+    """Body for ``POST /admin/vendors/{id}/reject/`` — reason is required."""
+
+    reason = serializers.CharField(min_length=3, max_length=2000, trim_whitespace=True)
+
+# ─────────────────────── OTP / email-verification ───────────────────────
+class VerifyOTPSerializer(serializers.Serializer):
+    """Body for ``POST /api/v1/auth/verify-email/``.
+
+    Two fields only: the email (used to look up the user) + the 6-digit
+    numeric code. ``email`` is case-normalised in ``validate_email``.
+    """
+
+    email = serializers.EmailField()
+    code = serializers.CharField(min_length=6, max_length=6)
+
+    def validate_email(self, value: str) -> str:
+        return value.strip().lower()
+
+    def validate_code(self, value: str) -> str:
+        v = value.strip()
+        if not v.isdigit():
+            raise serializers.ValidationError(_("Code must be digits only."))
+        return v
+
+
+class RequestOTPResendSerializer(serializers.Serializer):
+    """Body for ``POST /api/v1/auth/resend-otp/`` -- email only.
+
+    Used both by the signup flow (re-request the first code) and by
+    future password-reset flows (request the reset code).
+    """
+
+    email = serializers.EmailField()
+
+    def validate_email(self, value: str) -> str:
+        return value.strip().lower()
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    """Body for ``POST /api/v1/auth/change-password/`` (authenticated).
+
+    Mirrors Django's built-in ``PasswordChangeForm`` shape but accepts a
+    flat JSON body so the frontend can submit it via axios. We re-validate
+    the new password against Django's auth validators (min length, common
+    password, similarity, numeric-only) so a weak password is rejected at
+    the API boundary instead of relying on the client.
+    """
+
+    current_password = serializers.CharField(write_only=True, trim_whitespace=False)
+    new_password = serializers.CharField(write_only=True, trim_whitespace=False, min_length=8)
+    confirm_new_password = serializers.CharField(write_only=True, trim_whitespace=False)
+
+    def validate_current_password(self, value: str) -> str:
+        user = self.context["request"].user
+        if not user.check_password(value):
+            raise serializers.ValidationError(
+                _("Current password is incorrect."),
+                code="invalid_current_password",
+            )
+        return value
+
+    def validate_new_password(self, value: str) -> str:
+        # Reuse the same validators as registration so the policy is
+        # uniform: min length 8, not in the common-password list, not
+        # entirely numeric, not too similar to the user's personal info.
+        user = self.context["request"].user
+        try:
+            validate_password(value, user=user)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(
+                list(exc.messages),
+                code="weak_password",
+            ) from exc
+        return value
+
+    def validate(self, attrs):
+        if attrs["new_password"] != attrs["confirm_new_password"]:
+            raise serializers.ValidationError(
+                {"confirm_new_password": "Passwords do not match."},
+                code="password_mismatch",
+            )
+        if attrs["current_password"] == attrs["new_password"]:
+            raise serializers.ValidationError(
+                {"new_password": "New password must be different from the current one."},
+                code="same_password",
+            )
+        return attrs

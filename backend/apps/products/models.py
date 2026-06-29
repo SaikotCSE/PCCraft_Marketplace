@@ -4,6 +4,7 @@ from __future__ import annotations
 import uuid
 from decimal import Decimal
 
+from django.contrib.postgres.search import SearchVectorField
 from django.core.validators import MinValueValidator
 from django.db import models
 from django.utils.text import slugify
@@ -146,6 +147,13 @@ class Product(TimeStampedModel):
     review_count = models.PositiveIntegerField(default=0)
     total_sold = models.PositiveIntegerField(default=0)
 
+    # -- Module 11 full-text search -----------------------------------
+    # A weighted ``SearchVector`` of name (A) + short_description (B) +
+    # description (C). Recomputed in ``Product.save`` via a single
+    # ``SearchVector`` update so the GIN index always reflects the
+    # latest text. Null when the row has not been indexed yet.
+    search_vector = SearchVectorField(null=True, blank=True)
+
     class Meta:
         verbose_name = _("Product")
         verbose_name_plural = _("Products")
@@ -255,6 +263,34 @@ class Product(TimeStampedModel):
                 slug = "%s-%d" % (base, i)
             self.slug = slug
         super().save(*args, **kwargs)
+        # Module 11: keep the GIN-indexed ``search_vector`` in sync.
+        # Performed as a single ``SearchVector(...)`` UPDATE so the
+        # weighted vectors (A=name, B=short_description, C=description)
+        # recompute in the database and the index reflects the latest
+        # text. Silently no-ops on non-Postgres databases.
+        self._refresh_search_vector()
+
+    def _refresh_search_vector(self) -> None:
+        """Recompute ``search_vector`` via a single UPDATE (Module 11).
+
+        Imported lazily to avoid a circular import on models import
+        (django.contrib.postgres.search pulls in DB machinery the
+        settings layer only loads when it sees the schema).
+        """
+        try:
+            from django.contrib.postgres.search import SearchVector
+        except Exception:  # noqa: BLE001 -- only absent on non-PG
+            return
+        try:
+            Product.all_objects.filter(pk=self.pk).update(
+                search_vector=(
+                    SearchVector("name", weight="A")
+                    + SearchVector("short_description", weight="B")
+                    + SearchVector("description", weight="C")
+                ),
+            )
+        except Exception:  # noqa: BLE001 -- never block a save on vector
+            pass
 
 
 class ProductImage(TimeStampedModel):

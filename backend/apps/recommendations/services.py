@@ -115,3 +115,92 @@ class ProductViewService:
                 invalidate(f"rec:rv:{session_key}")
         except Exception:  # noqa: BLE001 -- spec: never raise
             logger.exception("cache invalidation failed for product=%s", product.id)
+
+
+# ====================================================================
+# SearchLogService — Module 11 search analytics
+# ====================================================================
+class SearchLogServiceError(Exception):
+    """Raised when a search-log write fails irrecoverably.
+
+    Module 11 explicitly requires logging to be **best-effort**: an
+    analytics outage must never break search. View / task code wraps
+    the call in ``try/except`` and swallows ``SearchLogServiceError``.
+    """
+
+
+class SearchLogService:
+    """Persists search queries for analytics (Module 11 §11.1).
+
+    Three entry points:
+
+    * :meth:`normalize` — strip + lower-case + collapse whitespace;
+      applies project-wide to anything that touches the search box.
+    * :meth:`record_async` — fire-and-forget Celery dispatch so the
+      search view never waits on the DB write.
+    * :meth:`record` — synchronous writer used by tests + the Celery
+      task itself.
+    """
+
+    MIN_QUERY_LEN = 3
+
+    @staticmethod
+    def normalize(raw: str | None) -> str:
+        if not raw:
+            return ""
+        return " ".join(str(raw).strip().lower().split())
+
+    @staticmethod
+    def _resolve_user(user_id):
+        if user_id in (None, ""):
+            return None
+        try:
+            return CustomUser.objects.get(pk=user_id)
+        except CustomUser.DoesNotExist:
+            return None
+
+    @staticmethod
+    def record(*, query: str, results_count: int, user_id=None) -> None:
+        """Synchronous insert. Used by :func:`record_search_event_task`."""
+        from apps.recommendations.models import SearchLog
+
+        normalized = SearchLogService.normalize(query)
+        if len(normalized) < SearchLogService.MIN_QUERY_LEN:
+            return
+        try:
+            user = SearchLogService._resolve_user(user_id)
+            SearchLog.objects.create(
+                query=normalized,
+                results_count=max(0, int(results_count)),
+                user=user,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("search log write failed: %s", exc)
+            raise SearchLogServiceError(str(exc)) from exc
+
+    @staticmethod
+    def record_async(*, query: str, results_count: int, user_id=None) -> None:
+        """Fire-and-forget Celery dispatch.
+
+        Falls back to a synchronous write when no broker is configured
+        so dev / EAGER mode still captures search events.
+        """
+        normalized = SearchLogService.normalize(query)
+        if len(normalized) < SearchLogService.MIN_QUERY_LEN:
+            return
+        try:
+            from apps.recommendations.tasks import log_search_event
+            log_search_event.delay(
+                query=normalized,
+                results_count=int(results_count),
+                user_id=str(user_id) if user_id else None,
+            )
+        except Exception:  # noqa: BLE001 -- broker down → fall back
+            try:
+                SearchLogService.record(
+                    query=normalized,
+                    results_count=results_count,
+                    user_id=user_id,
+                )
+            except SearchLogServiceError:
+                logger.exception("search log fallback write failed")

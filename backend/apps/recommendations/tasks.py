@@ -1,6 +1,6 @@
-"""Celery tasks for the recommendations app (Module 7 spec §7.4).
+"""Celery tasks for the recommendations app (Module 7 spec §7.4 + Module 11).
 
-Five scheduled jobs:
+Scheduled jobs:
 
 * ``warm_trending_cache`` -- every 15 min, recomputes the global and
   per-category trending leaderboards.
@@ -10,6 +10,11 @@ Five scheduled jobs:
   personalized feed for the top 100 most-recent active buyers.
 * ``purge_stale_product_views`` -- nightly at 04:00 UTC, deletes
   ``ProductView`` rows older than 90 days.
+
+Fire-and-forget jobs:
+
+* ``log_search_event`` (Module 11) -- one row per search query,
+  dispatched from the search endpoint to keep request latency flat.
 
 Wired into ``CELERY_BEAT_SCHEDULE`` by ``apps.recommendations.apps``.
 """
@@ -149,3 +154,35 @@ def purge_stale_product_views(retention_days: int = 90) -> int:
     except Exception:  # noqa: BLE001
         logger.exception("purge_stale_product_views failed")
         return 0
+
+
+# ---------------------------------------------------------------------------
+# Module 11 -- async search-query logging
+# ---------------------------------------------------------------------------
+@shared_task(name="apps.recommendations.log_search_event", bind=True, max_retries=3, default_retry_delay=10)
+def log_search_event(self, *, query: str, results_count: int, user_id: int | None = None) -> int:
+    """Insert a SearchLog row on behalf of the search endpoint.
+
+    Fire-and-forget: dispatched by ``SearchLogService.record_async`` so
+    the request handler never blocks on a database write. Retries up
+    to three times on transient failures.
+    """
+    from apps.recommendations.models import SearchLog
+    from apps.recommendations.services import SearchLogService
+
+    q = SearchLogService.normalize(query)
+    if len(q) < SearchLogService.MIN_QUERY_LEN:
+        return 0
+    try:
+        SearchLog.objects.create(
+            query=q,
+            user_id=user_id,
+            results_count=int(results_count),
+        )
+        return 1
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("log_search_event failed for q=%r", q)
+        try:
+            raise self.retry(exc=exc)
+        except self.MaxRetriesExceededError:
+            return 0

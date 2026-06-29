@@ -18,6 +18,7 @@ const ErrorState = ({
   retryLabel = 'Retry',
   onRetry,
   className = '',
+  children,
 }) => (
   <div
     role="alert"
@@ -41,6 +42,7 @@ const ErrorState = ({
         {retryLabel}
       </button>
     )}
+    {children}
   </div>
 );
 

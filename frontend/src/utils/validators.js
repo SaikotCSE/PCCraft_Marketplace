@@ -132,6 +132,12 @@ export const vendorDocumentsSchema = z.object({
   trade_license_doc: fileSchema,
   nid_number: z.string().trim().min(4, 'NID number is required').max(40),
   nid_doc: fileSchema,
+  // Backend BooleanField requires `accept_vendor_terms` on the multipart
+  // POST; we mirror that here so the user gets an inline error before the
+  // request leaves the browser.
+  accept_vendor_terms: z.literal(true, {
+    errorMap: () => ({ message: 'You must accept the vendor agreement' }),
+  }),
 });
 
 export const vendorStorefrontSchema = z.object({
@@ -149,6 +155,30 @@ export const vendorStorefrontSchema = z.object({
     errorMap: () => ({ message: 'You must accept the vendor agreement' }),
   }),
 });
+
+// Module 10 — logo + banner uploads. Spec caps logo at 2 MB and banner
+// at 5 MB; backend validators allow up to 5 MB / 10 MB respectively so
+// anything we send through here also passes server-side validation.
+const MAX_LOGO_BYTES = 2 * 1024 * 1024;
+const MAX_BANNER_BYTES = 5 * 1024 * 1024;
+const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+
+const imageFileSchema = (maxBytes, kind) =>
+  z
+    .instanceof(File, { message: 'Please attach an image file' })
+    .refine((f) => f.size <= maxBytes, {
+      message: `${kind} must be ${maxBytes / (1024 * 1024)} MB or smaller`,
+    })
+    .refine((f) => IMAGE_TYPES.includes(f.type), {
+      message: `${kind} must be a JPG, PNG, or WEBP`,
+    });
+
+export const vendorStoreAssetsSchema = z.object({
+  store_logo: imageFileSchema(MAX_LOGO_BYTES, 'Logo'),
+  store_banner: imageFileSchema(MAX_BANNER_BYTES, 'Banner'),
+});
+
+export { MAX_LOGO_BYTES, MAX_BANNER_BYTES };
 
 // ─── Profile / password change ───────────────────────────────────────
 export const profileUpdateSchema = z.object({

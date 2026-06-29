@@ -883,4 +883,230 @@ class ReturnService:
         if status:
             qs = qs.filter(status=status)
         return qs
+
+
+# ====================================================================
+# OrderAdminService — Module 9 admin order list/detail (read-only)
+# ====================================================================
+class OrderAdminServiceError(Exception):
+    """Typed error for admin-order operations.
+
+    Views read ``exc.http_status`` to map a failure to a DRF response.
+    """
+
+    DEFAULT_HTTP_STATUS = 400
+
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        *,
+        fields: dict | None = None,
+        http_status: int | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.fields = fields or {}
+        self.http_status = http_status or self.DEFAULT_HTTP_STATUS
+
+
+class OrderAdminService:
+    """Business-logic for admin order browsing.
+
+    Per spec §Module 9 (lines 3207-3225) admin order endpoints are
+    read-only — list with filters + retrieve by order_number. Status
+    transitions stay on the existing :class:`OrderService`.
+    """
+
+    @staticmethod
+    def list_orders(
+        *,
+        status: str = "",
+        date_from: str = "",
+        date_to: str = "",
+        vendor: str = "",
+        search: str = "",
+        ordering: str = "-created_at",
+    ):
+        """Return an admin-scoped queryset of :class:`Order`.
+
+        * ``status`` must be a valid :class:`OrderStatus` value or empty.
+        * ``date_from`` / ``date_to`` are ISO-8601 date strings
+          (``YYYY-MM-DD``); invalid dates raise ``ValueError`` which the
+          view maps to ``validation_error``.
+        * ``vendor`` is a :class:`VendorProfile` UUID; filtered via
+          ``items__vendor_id`` so the order must contain at least one
+          line item from that vendor.
+        * ``search`` matches against ``order_number`` and the customer's
+          email (case-insensitive).
+        """
+        from datetime import datetime
+
+        from apps.orders.models import Order, OrderStatus
+
+        qs = Order.all_objects.select_related("user").prefetch_related("items")
+
+        if status:
+            valid = {choice.value for choice in OrderStatus}
+            if status not in valid:
+                raise ValueError("Unknown status: %s" % status)
+            qs = qs.filter(status=status)
+
+        if date_from:
+            try:
+                dt = datetime.strptime(date_from, "%Y-%m-%d")
+            except ValueError as exc:
+                raise ValueError("date_from must be YYYY-MM-DD") from exc
+            qs = qs.filter(created_at__date__gte=dt.date())
+
+        if date_to:
+            try:
+                dt = datetime.strptime(date_to, "%Y-%m-%d")
+            except ValueError as exc:
+                raise ValueError("date_to must be YYYY-MM-DD") from exc
+            qs = qs.filter(created_at__date__lte=dt.date())
+
+        if vendor:
+            qs = qs.filter(items__vendor_id=vendor).distinct()
+
+        if search:
+            term = search.strip()
+            if term:
+                qs = qs.filter(
+                    models_q(order_number__icontains=term)
+                    | models_q(user__email__icontains=term)
+                )
+
+        # Defensive ordering: only allow orderings on indexed fields.
+        allowed = {
+            "created_at", "-created_at",
+            "total", "-total",
+            "status", "-status",
+            "order_number", "-order_number",
+        }
+        if ordering in allowed:
+            qs = qs.order_by(ordering)
+        else:
+            qs = qs.order_by("-created_at")
+
         return qs
+
+    @staticmethod
+    def get_order_by_number(order_number: str):
+        """Fetch an :class:`Order` by its human-facing order number."""
+        from apps.orders.models import Order
+        try:
+            return (
+                Order.all_objects
+                .select_related("user")
+                .prefetch_related("items", "items__product")
+                .get(order_number=order_number)
+            )
+        except Order.DoesNotExist as exc:
+            raise OrderAdminServiceError(
+                "not_found",
+                "Order not found.",
+                fields={"order_number": "No order with that number."},
+                http_status=404,
+            ) from exc
+
+
+def models_q(*args, **kwargs):
+    """Re-export ``Q`` for use in module-level service helpers."""
+    from django.db.models import Q
+    return Q(*args, **kwargs)
+
+
+# ====================================================================
+# ReturnAdminService — Module 9 admin override of return flow
+# ====================================================================
+class ReturnAdminServiceError(OrderAdminServiceError):
+    """Typed error for admin return operations. Aliases
+    :class:`OrderAdminServiceError` so the existing admin views'
+    ``except OrderAdminServiceError`` clauses catch it too."""
+
+
+class ReturnAdminService:
+    """Admin-side return workflow (Module 9).
+
+    Two actions live here that are NOT exposed to vendors:
+
+    * ``process_refund`` — admin marks the refund as initiated
+      (status ``REFUND_INITIATED``). Used when the admin must push a
+      refund through the gateway manually because the vendor-side
+      flow is stuck.
+    * ``confirm_refund`` — admin confirms the refund has cleared
+      (status ``REFUNDED``).
+
+    Both actions only run for returns that have at least reached
+    ``RECEIVED``. Anything earlier in the lifecycle is the vendor's
+    job — admin override is refused with ``invalid_status``.
+    """
+
+    @staticmethod
+    def _get(return_id) -> ReturnRequest:
+        try:
+            return (
+                ReturnRequest.all_objects
+                .select_related(
+                    "order_item", "order_item__order",
+                    "order_item__vendor", "customer",
+                )
+                .get(pk=return_id)
+            )
+        except ReturnRequest.DoesNotExist as exc:
+            raise ReturnAdminServiceError(
+                "not_found",
+                "Return request not found.",
+                fields={"return_id": "No return with that id."},
+                http_status=404,
+            ) from exc
+
+    @staticmethod
+    @transaction.atomic
+    def process_refund(*, actor, return_id, admin_notes: str = "") -> ReturnRequest:
+        ret = ReturnAdminService._get(return_id)
+        if ret.status not in {ReturnStatus.RECEIVED, ReturnStatus.REFUND_INITIATED}:
+            raise ReturnAdminServiceError(
+                "invalid_status",
+                "Refund can only be processed once the return has been received.",
+                http_status=400,
+            )
+        if ret.status == ReturnStatus.REFUND_INITIATED:
+            return ret
+        ret.status = ReturnStatus.REFUND_INITIATED
+        ret.refund_initiated_at = timezone.now()
+        if admin_notes:
+            ret.admin_notes = admin_notes
+        ret.save(update_fields=[
+            "status", "refund_initiated_at",
+            "admin_notes", "updated_at",
+        ])
+        logger.info(
+            "return.process_refund id=%s admin=%s", ret.pk, getattr(actor, "pk", None),
+        )
+        return ret
+
+    @staticmethod
+    @transaction.atomic
+    def confirm_refund(*, actor, return_id, admin_notes: str = "") -> ReturnRequest:
+        ret = ReturnAdminService._get(return_id)
+        if ret.status != ReturnStatus.REFUND_INITIATED:
+            raise ReturnAdminServiceError(
+                "invalid_status",
+                "Refund must be initiated before it can be confirmed.",
+                http_status=400,
+            )
+        ret.status = ReturnStatus.REFUNDED
+        ret.refunded_at = timezone.now()
+        if admin_notes:
+            ret.admin_notes = admin_notes
+        ret.save(update_fields=[
+            "status", "refunded_at",
+            "admin_notes", "updated_at",
+        ])
+        logger.info(
+            "return.confirm_refund id=%s admin=%s", ret.pk, getattr(actor, "pk", None),
+        )
+        return ret

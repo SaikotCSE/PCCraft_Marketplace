@@ -49,7 +49,7 @@ import { usePageTitle } from '@hooks/usePageTitle';
 import EmptyState from '@components/common/EmptyState';
 import Modal from '@components/common/Modal';
 import Skeleton from '@components/common/Skeleton';
-import Stepper from '@components/auth/Stepper';
+import Stepper from '@components/common/Stepper';
 import { cn } from '@/utils/cn';
 import { formatPrice } from '@utils/formatters';
 import { paths } from '@routes/routePaths';

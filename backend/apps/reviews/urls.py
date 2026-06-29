@@ -121,12 +121,12 @@ admin_router = [
     ),
     path(
         "<uuid:pk>/hide/",
-        AdminReviewViewSet.as_view({"post": "hide"}),
+        AdminReviewViewSet.as_view({"patch": "hide"}),
         name="admin-reviews-hide",
     ),
     path(
         "<uuid:pk>/restore/",
-        AdminReviewViewSet.as_view({"post": "restore"}),
+        AdminReviewViewSet.as_view({"patch": "restore"}),
         name="admin-reviews-restore",
     ),
     path(

@@ -11,6 +11,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
 import AppRouter from '@/routes/AppRouter';
+import ErrorBoundary from '@components/common/ErrorBoundary';
 import { useAuthStore } from '@/context/useAuthStore';
 import { useCartStore } from '@/context/useCartStore';
 import { useWishlistStore } from '@/context/useWishlistStore';
@@ -59,7 +60,13 @@ const App = () => {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AppRouter />
+      {/* Top-level safety net: catches render errors anywhere above
+          the router (auth context, layout chrome, query client) so
+          the page never goes fully blank. Per-page boundaries inside
+          AppRouter handle errors that originate inside a page. */}
+      <ErrorBoundary scope="app">
+        <AppRouter />
+      </ErrorBoundary>
     </QueryClientProvider>
   );
 };

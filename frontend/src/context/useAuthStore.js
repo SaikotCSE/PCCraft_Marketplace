@@ -190,6 +190,58 @@ export const useAuthStore = create(
         throw err;
       }
     },
+
+    /**
+     * POST /auth/verify-email/ — submit the 6-digit code, get tokens back
+     * and authenticate the user in-place. The component calling this is
+     * responsible for advancing the UI to the "DONE" step.
+     * @param {{ email: string, code: string }} payload
+     * @returns {Promise<object>} the verified user
+     */
+    verifyOtp: async (payload) => {
+      set({ isLoading: true, error: null });
+      try {
+        const data = await authService.verifyOtp(payload);
+        const body = data?.data || data;
+        // server shape: {access, refresh, user}
+        if (body?.access) {
+          get().setAuth({
+            user: body.user,
+            access: body.access,
+            refresh: body.refresh,
+          });
+        }
+        return body?.user || null;
+      } catch (err) {
+        const apiError = err.response?.data?.error;
+        const message = apiError?.message || 'Verification failed.';
+        set({ error: message });
+        throw err;
+      } finally {
+        set({ isLoading: false });
+      }
+    },
+
+    /**
+     * POST /auth/resend-otp/ — fire-and-forget resend. The endpoint
+     * always returns 200 with a generic message, so this rarely throws.
+     * @param {{ email: string }} payload
+     * @returns {Promise<{message: string}>}
+     */
+    resendOtp: async (payload) => {
+      set({ isLoading: true, error: null });
+      try {
+        const data = await authService.resendOtp(payload);
+        return data?.data || data;
+      } catch (err) {
+        const apiError = err.response?.data?.error;
+        const message = apiError?.message || 'Could not resend code.';
+        set({ error: message });
+        throw err;
+      } finally {
+        set({ isLoading: false });
+      }
+    },
   }))
 );
 

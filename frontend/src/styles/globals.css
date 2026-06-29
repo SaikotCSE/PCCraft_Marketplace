@@ -39,8 +39,38 @@
   --font-heading: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
 }
 
+/* ──────────────────────────────────────────────────────────────
+   Shorthand aliases — let components use `bg-surface`,
+   `bg-bg-muted`, `border-border`, `accent-600/700`, etc.,
+   in addition to the canonical numbered tokens above. These
+   resolve to the same spec values so visual output is
+   identical to the canonical palette (see §1.2).
+   ────────────────────────────────────────────────────────────── */
+@theme {
+  /* Unnumbered surface / primary / accent shorthands.
+     Tailwind v4 generates utilities from any `--color-<name>`
+     token; these are aliases, not new colors. */
+  --color-surface:       var(--color-surface-50);   /* = #FFFFFF */
+  --color-bg-muted:      var(--color-surface-200);  /* = #F1F5F9 */
+  --color-border:        var(--color-surface-300);  /* = #E2E8F0 */
+  --color-primary:       var(--color-primary-900);  /* = #0F172A */
+  --color-accent:        var(--color-accent-500);   /* = #6366F1 */
+
+  /* Extended accent / primary steps for hover and pressed states.
+     Same hue family, derived from the spec swatches (Indigo / Slate). */
+  --color-accent-600:    #4F46E5;   /* Pressed accent (Indigo-600) */
+  --color-accent-700:    #4338CA;   /* Deep accent (Indigo-700) */
+  --color-primary-600:   #1E293B;   /* = primary-800, for hover on chrome */
+  --color-primary-500:   #475569;   /* Slate-600, for muted chrome text */
+}
+
 /* Base: light background, dark text on all content.
-   Single light theme — no dark-mode toggle (see §1.2 design rules). */
+  Single light theme — no dark-mode toggle (see §1.2 design rules).
+
+  Page background uses surface-200 (#F1F5F9) — the spec's "alternating
+  rows / input backgrounds" tone. Cards/forms sit on surface-50 (#FFFFFF),
+  giving the 1.5% luminance step the design needs for cards to read as
+  elevated surfaces against the page. */
 html,
 body,
 #root {
@@ -49,8 +79,7 @@ body,
 
 body {
   margin: 0;
-  background-color: var(--color-surface-100);
-  color: var(--color-text-primary);
+  background-color: var(--color-surface-200);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -58,13 +87,16 @@ body {
 
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-heading);
-  color: var(--color-text-primary);
+  /* Color is intentionally NOT set here — headings inherit or use a
+     Tailwind text utility (text-text-primary on light surfaces,
+     text-text-inverse on dark chrome) so they remain readable on
+     both navbar-style navy and content-style white backgrounds. */
 }
 
 /* Reusable utility for focus rings driven by the accent color. */
 @layer components {
   .focus-ring {
-    @apply outline-none ring-2 ring-transparent ring-offset-2 ring-offset-surface-100
+    @apply outline-none ring-2 ring-transparent ring-offset-2 ring-offset-surface-200
            focus-visible:ring-accent-500 transition-all duration-200 ease-in-out;
   }
 }

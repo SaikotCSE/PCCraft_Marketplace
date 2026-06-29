@@ -18,6 +18,7 @@ from apps.products import urls as products_urls
 from apps.orders import urls as apps_orders_urls
 from apps.reviews import urls as apps_reviews_urls
 from apps.compatibility import urls as compatibility_urls
+from apps.recommendations import search_urls as search_analytics_urls
 
 api_v1_patterns = [
     path("common/", include(("apps.common.urls", "common"), namespace="common")),
@@ -59,7 +60,27 @@ api_v1_patterns = [
     path("reviews/", include(("apps.reviews.urls", "reviews"), namespace="reviews")),
     path("vendor/reviews/", include((apps_reviews_urls.vendor_urlpatterns, "vendor-reviews"), namespace="vendor-reviews")),
     path("admin/reviews/", include((apps_reviews_urls.admin_urlpatterns, "admin-reviews"), namespace="admin-reviews")),
+    # Module 9 — admin user moderation. Separate URLconf so the public
+    # auth namespace stays isolated.
+    path("admin/users/", include(("apps.accounts.admin_urls", "admin-users"), namespace="admin-users")),
+    path("admin/vendors/", include(("apps.accounts.admin_vendor_urls", "admin-vendors"), namespace="admin-vendors")),
+    path("admin/products/", include(("apps.products.admin_urls", "admin-products"), namespace="admin-products")),
+    path("admin/orders/", include(("apps.orders.admin_urls", "admin-orders"), namespace="admin-orders")),
+    path("admin/brands/", include(("apps.brands.admin_urls", "admin-brands"), namespace="admin-brands")),
+    path("admin/categories/", include(("apps.categories.admin_urls", "admin-categories"), namespace="admin-categories")),
     path("recommendations/", include(("apps.recommendations.urls", "recommendations"), namespace="recommendations")),
+    # Module 11 — search & filtering (advanced). Public + staff endpoints.
+    path("search/", include(("apps.recommendations.search_urls", "search"), namespace="search")),
+    # Module 11 — staff-only aggregate analytics. Mount only the
+    # ``analytics_urlpatterns`` subset so the public /api/v1/search/*
+    # routes aren't double-exposed under /api/v1/analytics/*.
+    path(
+        "analytics/",
+        include(
+            (search_analytics_urls.analytics_urlpatterns, "search-analytics"),
+            namespace="search-analytics",
+        ),
+    ),
     path("compatibility/", include(("apps.compatibility.urls", "compatibility"), namespace="compatibility")),
     # Spec §2.10: "On login: auto-POST to /api/v1/builds/". Mount only
     # the build-CRUD subset (build_urlpatterns) here so the alias path
@@ -71,6 +92,25 @@ api_v1_patterns = [
         include((compatibility_urls.build_urlpatterns, "builds"), namespace="builds"),
     ),
     path("dashboard/", include(("apps.dashboard.urls", "dashboard"), namespace="dashboard")),
+    # Module 10 — vendor dashboard analytics.
+    # Mounted at /api/v1/vendor/dashboard/* and gated by IsApprovedVendor.
+    path(
+        "vendor/dashboard/",
+        include(
+            ("apps.dashboard.vendor_analytics_urls", "vendor-dashboard"),
+            namespace="vendor-dashboard",
+        ),
+    ),
+    # Module 9 spec writes analytics URLs as /api/v1/admin/analytics/...
+    # The canonical implementation lives under /api/v1/dashboard/*; this
+    # alias mount re-exposes the same views so spec-named URLs resolve.
+    path(
+        "admin/analytics/",
+        include(
+            ("apps.dashboard.admin_analytics_urls", "admin-analytics"),
+            namespace="admin-analytics",
+        ),
+    ),
 ]
 
 urlpatterns = [

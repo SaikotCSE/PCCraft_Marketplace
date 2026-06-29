@@ -18,7 +18,7 @@ import { usePageTitle } from '@hooks/usePageTitle';
 import EmptyState from '@components/common/EmptyState';
 import Skeleton from '@components/common/Skeleton';
 import StatusBadge from '@components/common/StatusBadge';
-import Stepper from '@components/auth/Stepper';
+import Stepper from '@components/common/Stepper';
 import ReturnRequestModal from './ReturnRequestModal';
 import { ORDER_STATUSES } from '@utils/constants';
 import { formatDate, formatDateTime, formatPrice } from '@utils/formatters';

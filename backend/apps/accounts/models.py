@@ -160,6 +160,22 @@ class CustomUser(AbstractBaseUser, PermissionsMixin, TimeStampedModel):
     is_staff = models.BooleanField(default=False)
     date_joined = models.DateTimeField(default=timezone.now)
 
+    # ---- security / lockout (Module 9) -----------------------------
+    # ``is_locked`` is admin-triggered (suspend) OR auto-triggered when
+    # failed login attempts hit the threshold (see
+    # ``apps.common.security.AccountLockoutPolicy``). ``last_failed_login``
+    # is the timestamp used to auto-unlock after LOCKOUT_MINUTES.
+    is_locked = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="Module 9: account is locked. Login attempts will be refused.",
+    )
+    failed_login_attempts = models.PositiveIntegerField(
+        default=0,
+        help_text="Module 9: counter, reset on successful login.",
+    )
+    last_failed_login = models.DateTimeField(null=True, blank=True)
+
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["full_name"]
 
@@ -398,3 +414,114 @@ class VendorProfile(TimeStampedModel):
                 slug = "%s-%d" % (base, i)
             self.store_slug = slug
         super().save(*args, **kwargs)
+
+# ====================================================================
+# EmailVerificationCode (OTP) — Module 1 hardening
+# ====================================================================
+class EmailVerificationCode(TimeStampedModel):
+    """One-time 6-digit code sent to ``user.email`` for email verification.
+
+    The plaintext code is never persisted — only ``code_hash`` (sha256 of
+    the numeric code + a per-row salt prefix) lives in the DB. The row is
+    considered spent as soon as ``used_at`` is set, or invalid past
+    ``expires_at``. ``attempts`` is bumped on every failed verify to
+    support per-code rate limiting (in addition to the DRF throttle).
+
+    Lifecycle (handled in :class:`apps.accounts.services.AuthService`):
+
+    * ``issue_verification_code(user, purpose=SIGNUP)`` creates a new row
+      and dispatches the email.
+    * ``verify_email(email, code, purpose=SIGNUP)`` checks the latest
+      un-used un-expired row for that user, increments ``attempts``,
+      flips ``user.is_verified=True`` + ``is_active=True`` on success,
+      and stamps ``used_at``.
+    * ``resend_verification_code(email, purpose=SIGNUP)`` invalidates
+      older rows for that user/purpose by setting ``used_at`` and issues
+      a fresh one.
+
+    Why a dedicated model (vs storing on ``CustomUser``)? It gives us:
+
+    * An audit trail (created_at, attempts, used_at) for security review.
+    * Multiple concurrent purposes (signup, password reset) without
+      conflicting state on the user row.
+    * Easy revocation — flip ``used_at`` on every prior row when a new
+      one is issued.
+    """
+
+    class Purpose(models.TextChoices):
+        SIGNUP = "signup", _("Signup")
+        PASSWORD_RESET = "password_reset", _("Password reset")
+        EMAIL_CHANGE = "email_change", _("Email change")
+
+    user = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        related_name="email_verification_codes",
+    )
+    purpose = models.CharField(
+        max_length=24,
+        choices=Purpose.choices,
+        default=Purpose.SIGNUP,
+        db_index=True,
+    )
+
+    # sha256("<code>:<salt>") — salt is the row's ``created_at`` isoformat
+    # so we don't need a separate salt column. The plaintext code lives
+    # only in the email + the form input — never in the DB.
+    code_hash = models.CharField(max_length=128)
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    expires_at = models.DateTimeField(db_index=True)
+    used_at = models.DateTimeField(null=True, blank=True)
+
+    # Per-code failure counter. ``AuthService.verify_email`` caps this at
+    # ``MAX_ATTEMPTS`` and invalidates the row once it is reached.
+    attempts = models.PositiveIntegerField(default=0)
+
+    # Last IP that attempted verification against this row. Useful for
+    # security audits; not used for throttling directly (DRF throttles
+    # handle that).
+    last_attempt_ip = models.GenericIPAddressField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = _("email verification code")
+        verbose_name_plural = _("email verification codes")
+        ordering = ("-created_at",)
+        indexes = [
+            models.Index(fields=["user", "purpose", "-created_at"]),
+        ]
+
+    def __str__(self):  # pragma: no cover
+        return "EmailVerificationCode<%s/%s>" % (self.user_id, self.purpose)
+
+    # ────────────────────────────── state helpers ─────────────────────
+    @property
+    def is_expired(self) -> bool:
+        return timezone.now() >= self.expires_at
+
+    @property
+    def is_used(self) -> bool:
+        return self.used_at is not None
+
+    @property
+    def is_spent(self) -> bool:
+        return self.is_used or self.is_expired
+
+    def compute_hash(self, code: str) -> str:
+        """sha256(``code + ":" + created_at_isoformat``).
+
+        ``created_at`` is set on first ``save()`` so the helper also
+        works for in-memory rows before they're persisted (used in
+        tests).
+        """
+        import hashlib
+
+        salt = (self.created_at or timezone.now()).isoformat()
+        return hashlib.sha256(f"{code}:{salt}".encode("utf-8")).hexdigest()
+
+    def matches(self, code: str) -> bool:
+        """Constant-time equality check against the persisted hash."""
+        import hmac
+
+        candidate = self.compute_hash(code)
+        return hmac.compare_digest(candidate, self.code_hash)

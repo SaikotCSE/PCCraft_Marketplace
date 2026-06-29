@@ -31,7 +31,7 @@ import {
 import toast from 'react-hot-toast';
 
 import { usePageTitle } from '@/hooks/usePageTitle';
-import StarRating from '@/components/reviews/StarRating';
+import StarRating from '@/components/products/StarRating';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
 import Skeleton from '@/components/common/Skeleton';
 import EmptyState from '@/components/common/EmptyState';
