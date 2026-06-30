@@ -10,6 +10,7 @@ import { ArrowLeft, Save } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 import { usePageTitle } from '@/hooks/usePageTitle';
+import ErrorState from '@components/common/ErrorState';
 import FileUpload from '@components/common/FileUpload';
 import { adminService } from '@services/adminService';
 import { paths } from '@/routes/routePaths';
@@ -120,6 +121,25 @@ const AdminCategoryFormPage = () => {
 
   if (isEdit && detail.isLoading) {
     return <div className="p-8 text-text-secondary">Loading category…</div>;
+  }
+
+  if (isEdit && detail.isError) {
+    return (
+      <div className="mx-auto max-w-3xl p-8">
+        <ErrorState
+          title="Could not load category"
+          description="We couldn't fetch this category. It may have been removed."
+          onRetry={() => detail.refetch()}
+        >
+          <Link
+            to={paths.adminCategories()}
+            className="mt-3 inline-block text-sm font-medium text-accent-500 hover:text-accent-600"
+          >
+            ← Back to categories
+          </Link>
+        </ErrorState>
+      </div>
+    );
   }
 
   return (

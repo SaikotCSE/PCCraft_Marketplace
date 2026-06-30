@@ -12,6 +12,8 @@ import { Heart, ShoppingCart, Minus, Plus, Store, Shield } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 import { usePageTitle } from '@/hooks/usePageTitle';
+import ErrorState from '@components/common/ErrorState';
+import Skeleton from '@components/common/Skeleton';
 import ImageGallery from '@/components/products/ImageGallery';
 import PriceDisplay from '@/components/products/PriceDisplay';
 import StockBadge from '@/components/products/StockBadge';
@@ -21,6 +23,7 @@ import RecommendationCarousel from '@components/recommendation/RecommendationCar
 import { productService } from '@/services/productService';
 import { recommendationService } from '@services/recommendationService';
 import { formatPrice } from '@/utils/formatters';
+import { paths } from '@/routes/routePaths';
 import { getSessionKey } from '@utils/sessionKey';
 
 const ProductDetailPage = () => {
@@ -54,31 +57,42 @@ const ProductDetailPage = () => {
   if (isLoading) {
     return (
       <div className="mx-auto grid max-w-7xl grid-cols-1 gap-8 px-4 py-8 lg:grid-cols-2">
-        <div className="aspect-square animate-pulse rounded-xl bg-bg-muted" />
+        <Skeleton className="aspect-square w-full rounded-xl" />
         <div className="flex flex-col gap-3">
-          <div className="h-6 w-1/2 animate-pulse rounded bg-bg-muted" />
-          <div className="h-4 w-3/4 animate-pulse rounded bg-bg-muted" />
-          <div className="h-10 w-1/3 animate-pulse rounded bg-bg-muted" />
+          <Skeleton className="h-6 w-1/2" />
+          <Skeleton className="h-4 w-3/4" />
+          <Skeleton className="h-10 w-1/3" />
+          <Skeleton className="h-20 w-full" />
         </div>
       </div>
     );
   }
 
-  if (isError || !product) {
+  if (isError) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-16 text-center">
-        <h1 className="text-2xl font-bold text-text-primary">Product not found</h1>
-        <p className="mt-2 text-text-secondary">
-          The product you are looking for may have been removed or is unavailable.
-        </p>
-        <button
-          onClick={() => navigate('/products')}
-          className="mt-6 rounded-lg bg-accent-500 px-5 py-2 text-white hover:bg-accent-600"
+      <div className="mx-auto max-w-3xl px-4 py-16">
+        <ErrorState
+          title="Couldn't load this product"
+          description="There was a problem fetching this product. Please try again."
+          onRetry={() => window.location.reload()}
         >
-          Back to shop
-        </button>
+          <button
+            type="button"
+            onClick={() => navigate('/products')}
+            className="mt-4 text-sm font-medium text-accent-500 hover:text-accent-600"
+          >
+            ← Back to shop
+          </button>
+        </ErrorState>
       </div>
     );
+  }
+
+  if (!product) {
+    // Treat "product is null" as a true 404 — route to the global NotFound page
+    // per spec §Module 12 "404 handling" rule.
+    navigate(paths.notFound(), { replace: true });
+    return null;
   }
 
   const maxQty = Math.max(1, product.stock_quantity || 1);
