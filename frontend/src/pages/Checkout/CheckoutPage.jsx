@@ -510,6 +510,17 @@ const StepAddress = ({
           Add new address
         </button>
       )}
+
+      <p className="mt-3 text-xs text-text-secondary">
+        Need to manage your address book?{' '}
+        <Link
+          to={`${paths.profile()}?tab=addresses`}
+          className="inline-flex items-center gap-1 font-medium text-accent-600 hover:text-accent-700 hover:underline"
+        >
+          Manage addresses in profile
+          <ArrowRight className="h-3 w-3" />
+        </Link>
+      </p>
     </div>
   );
 };

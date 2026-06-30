@@ -199,6 +199,31 @@ export const passwordChangeSchema = z
     message: 'Passwords do not match',
   });
 
+// ─── Shipping address (Module 4) ─────────────────────────────────────
+// Mirrors `backend/apps/orders/serializers.py::ShippingAddressSerializer`.
+// Phone is relaxed (backend only rejects <7 chars) so customers who saved
+// a non-BD number earlier are not locked out.
+export const addressSchema = z.object({
+  label: z.string().trim().min(1, 'Label is required').max(80),
+  // full_name + phone come from the user profile (auto-filled by the
+  // address form). Optional here so the form can be submitted without
+  // surfacing them as required fields; the form layer merges in the
+  // profile values before sending to the backend.
+  full_name: z.string().trim().min(2).max(150).optional().default(''),
+  phone: z.string().trim().min(7).max(20).optional().default(''),
+  street_address: z
+    .string()
+    .trim()
+    .min(2, 'Street address is required')
+    .max(255),
+  address_line2: z.string().trim().max(255).optional().default(''),
+  city: z.string().trim().min(2, 'City is required').max(80),
+  district: z.string().trim().min(2, 'District is required').max(80),
+  postal_code: z.string().trim().max(20).optional().default(''),
+  country: z.string().trim().max(80).optional().default('Bangladesh'),
+  is_default: z.boolean().optional().default(false),
+});
+
 // ─── Password strength meter ─────────────────────────────────────────
 /**
  * Returns { score: 0..4, label: 'weak'|'fair'|'good'|'strong', checks: {...} }
