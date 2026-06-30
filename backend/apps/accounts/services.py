@@ -1014,8 +1014,11 @@ class VendorAdminService:
         Flips ``status`` to ``APPROVED``, sets ``approved_at`` to now,
         sets ``approved_by`` to ``actor``, clears ``rejection_reason``,
         and activates the linked :class:`CustomUser` so they can sign
-        in. Records an audit entry of action ``vendor.approve``.
-        No-ops when the vendor is already ``APPROVED``.
+        in. Also flips ``user.is_verified=True`` because vendors never
+        go through the customer OTP sign-up flow -- admin approval IS
+        the verification step for them, otherwise the email-verified
+        gate would 403 them at login. Records an audit entry of action
+        ``vendor.approve``. No-ops when the vendor is already ``APPROVED``.
 
         Args:
             actor: The :class:`CustomUser` performing the action.
@@ -1050,10 +1053,21 @@ class VendorAdminService:
             "rejection_reason", "updated_at",
         ])
         # Activate the underlying user so the vendor can sign in.
+        # Vendors never go through the customer OTP sign-up flow, so
+        # the admin's approval is what flips their ``is_verified``
+        # bit -- otherwise the email_verified gate (Module 1 hardening)
+        # would 403 them at login even though they were approved.
         user = vendor.user
+        update_fields = []
         if not user.is_active:
             user.is_active = True
-            user.save(update_fields=["is_active", "updated_at"])
+            update_fields.append("is_active")
+        if not user.is_verified:
+            user.is_verified = True
+            update_fields.append("is_verified")
+        if update_fields:
+            update_fields.append("updated_at")
+            user.save(update_fields=update_fields)
         UserAdminService._audit(
             actor, "vendor.approve", vendor, reason,
         )
