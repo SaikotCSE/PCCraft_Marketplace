@@ -22,9 +22,12 @@ import {
   ChevronRight,
   ChevronUp,
   ExternalLink,
+  FileText,
+  Image as ImageIcon,
   Info,
   Loader2,
   Mail,
+  Maximize2,
   Search,
   ShieldCheck,
   Store as StoreIcon,
@@ -61,6 +64,18 @@ function businessAddressLine(address) {
   return [street, city, district, postal].filter(Boolean).join(', ');
 }
 
+// File extensions the vendor upload form accepts (mirrors validators.js).
+const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp'];
+const PDF_EXTENSIONS = ['.pdf'];
+
+function classifyDoc(url) {
+  if (!url) return null;
+  const lower = url.split('?')[0].toLowerCase();
+  if (IMAGE_EXTENSIONS.some((ext) => lower.endsWith(ext))) return 'image';
+  if (PDF_EXTENSIONS.some((ext) => lower.endsWith(ext))) return 'pdf';
+  return 'other';
+}
+
 // ---------- page ------------------------------------------------------
 
 const AdminVendorsPage = () => {
@@ -82,6 +97,7 @@ const AdminVendorsPage = () => {
   }, [activeTab, appliedSearch]);
 
   const [expandedId, setExpandedId] = useState(null);
+  const [docPreview, setDocPreview] = useState(null); // { title, url, kind }
   const [approveTarget, setApproveTarget] = useState(null);
   const [rejectTarget, setRejectTarget] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
@@ -254,6 +270,7 @@ const AdminVendorsPage = () => {
                 setInfoTarget(v);
                 setInfoMessage('');
               }}
+              onViewDoc={(doc) => setDocPreview(doc)}
             />
           ))
         )}
@@ -455,6 +472,11 @@ const AdminVendorsPage = () => {
           </div>
         )}
       </Modal>
+
+      <DocumentPreviewModal
+        doc={docPreview}
+        onClose={() => setDocPreview(null)}
+      />
     </div>
   );
 };
@@ -469,6 +491,7 @@ const VendorCard = ({
   onApprove,
   onReject,
   onRequestInfo,
+  onViewDoc,
 }) => {
   const submitted = formatDateTime(v.created_at);
   const addr = businessAddressLine(v.business_address);
@@ -558,6 +581,26 @@ const VendorCard = ({
 
       {expanded && (
         <div className="grid gap-4 border-t border-surface-200 bg-surface-50 p-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
+          <div className="sm:col-span-2 lg:col-span-3">
+            <p className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-text-secondary">
+              <FileText className="h-3 w-3" aria-hidden="true" /> Submitted
+              documents
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <DocumentLink
+                url={v.trade_license_doc}
+                label="Trade license"
+                storeName={v.store_name}
+                onViewDoc={onViewDoc}
+              />
+              <DocumentLink
+                url={v.nid_doc}
+                label="National ID"
+                storeName={v.store_name}
+                onViewDoc={onViewDoc}
+              />
+            </div>
+          </div>
           <Detail icon={Building2} label="Trade license">
             {v.trade_license_number || '—'}
           </Detail>
@@ -611,6 +654,94 @@ const Detail = ({ icon: Icon, label, children }) => (
     <p className="mt-1 text-sm text-text-primary">{children}</p>
   </div>
 );
+
+const DocumentLink = ({ url, label, storeName, onViewDoc }) => {
+  if (!url) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-surface-300 bg-surface-50 px-2.5 py-1.5 text-xs text-text-secondary">
+        <FileText className="h-3.5 w-3.5" aria-hidden="true" />
+        {label} <span className="text-text-secondary/70">· not uploaded</span>
+      </span>
+    );
+  }
+  const kind = classifyDoc(url);
+  const Icon = kind === 'image' ? ImageIcon : FileText;
+  const modalTitle = `${label}${storeName ? ` · ${storeName}` : ''}`;
+  const handleClick = (e) => {
+    e.preventDefault();
+    onViewDoc?.({ title: modalTitle, url, kind });
+  };
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      className="group inline-flex items-center gap-2 rounded-md border border-accent-200 bg-accent-50 px-2.5 py-1.5 text-xs font-semibold text-accent-700 transition hover:border-accent-300 hover:bg-accent-100"
+    >
+      <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+      <span>{label}</span>
+      <Maximize2 className="h-3 w-3 opacity-60 transition group-hover:opacity-100" />
+    </button>
+  );
+};
+
+const DocumentPreviewModal = ({ doc, onClose }) => {
+  if (!doc) return null;
+  return (
+    <Modal
+      open={Boolean(doc)}
+      onClose={onClose}
+      title={doc.title}
+      size="2xl"
+      contentClassName="bg-surface-50"
+    >
+      <div className="flex items-center justify-center bg-surface-900/95 p-2">
+        {doc.kind === 'image' ? (
+          <img
+            src={doc.url}
+            alt={doc.title}
+            className="max-h-[70vh] max-w-full rounded-md object-contain"
+          />
+        ) : doc.kind === 'pdf' ? (
+          <iframe
+            src={doc.url}
+            title={doc.title}
+            className="h-[70vh] w-full rounded-md border border-surface-200 bg-surface"
+          />
+        ) : (
+          <p className="p-8 text-sm text-text-secondary">
+            This file type can't be previewed.{' '}
+            <a
+              href={doc.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-accent-600 hover:underline"
+            >
+              Open in a new tab
+            </a>
+            .
+          </p>
+        )}
+      </div>
+      <div className="mt-3 flex justify-end gap-2">
+        <a
+          href={doc.url}
+          download
+          className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-surface-100"
+        >
+          Download
+        </a>
+        <a
+          href={doc.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 rounded-md bg-accent-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-accent-600"
+        >
+          <ExternalLink className="h-3.5 w-3.5" /> Open in new tab
+        </a>
+      </div>
+    </Modal>
+  );
+};
 
 // ---------- useVendorTabCounts: lightweight per-status counts ---------
 //

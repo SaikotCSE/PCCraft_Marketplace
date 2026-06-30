@@ -594,6 +594,8 @@ class AdminVendorApplicationSerializer(serializers.ModelSerializer):
     rejection_reason = serializers.CharField(read_only=True, allow_blank=True)
     approved_at = serializers.DateTimeField(read_only=True)
     approved_by = serializers.SerializerMethodField()
+    trade_license_doc = serializers.SerializerMethodField()
+    nid_doc = serializers.SerializerMethodField()
     created_at = serializers.DateTimeField(read_only=True)
     updated_at = serializers.DateTimeField(read_only=True)
 
@@ -610,6 +612,8 @@ class AdminVendorApplicationSerializer(serializers.ModelSerializer):
             "business_name",
             "business_type",
             "trade_license_number",
+            "trade_license_doc",
+            "nid_doc",
             "business_address",
             "store_name",
             "store_slug",
@@ -625,6 +629,31 @@ class AdminVendorApplicationSerializer(serializers.ModelSerializer):
 
     def get_approved_by(self, obj: VendorProfile):
         return str(obj.approved_by_id) if obj.approved_by_id else None
+
+    @staticmethod
+    def _absolute_file_url(serializer, obj, field_name):
+        """Return an absolute URL for a ``FileField`` (or ``None``).
+
+        Mirrors :meth:`UserInlineSerializer.get_avatar`: swallows
+        ``ValueError`` raised by ``FileField.url`` when no file has
+        been uploaded yet, and falls back to a relative URL when no
+        request is in the serializer context.
+        """
+        file_field = getattr(obj, field_name, None)
+        if not file_field:
+            return None
+        try:
+            url = file_field.url
+        except ValueError:
+            return None
+        request = serializer.context.get("request")
+        return request.build_absolute_uri(url) if request else url
+
+    def get_trade_license_doc(self, obj: VendorProfile):
+        return self._absolute_file_url(self, obj, "trade_license_doc")
+
+    def get_nid_doc(self, obj: VendorProfile):
+        return self._absolute_file_url(self, obj, "nid_doc")
 
 
 class AdminVendorRejectSerializer(serializers.Serializer):

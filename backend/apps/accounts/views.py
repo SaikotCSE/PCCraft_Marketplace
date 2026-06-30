@@ -933,6 +933,7 @@ class AdminVendorListView(APIView):
         serializer = AdminVendorApplicationSerializer(
             page if page is not None else vendors,
             many=True,
+            context={"request": request},
         )
         if page is not None:
             return paginator.get_paginated_response(serializer.data)
@@ -957,6 +958,7 @@ class AdminVendorPendingView(APIView):
         serializer = AdminVendorApplicationSerializer(
             page if page is not None else vendors,
             many=True,
+            context={"request": request},
         )
         if page is not None:
             return paginator.get_paginated_response(serializer.data)
