@@ -123,4 +123,11 @@ urlpatterns = [
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
-    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+
+# Custom error handlers -- envelope every error response so the frontend
+# never sees a bare HTML 4xx/5xx. ``apps.common.views`` defines
+# JSON-producing handlers for each code.
+handler400 = "apps.common.views.bad_request_handler"
+handler403 = "apps.common.views.permission_denied_handler"
+handler404 = "apps.common.views.not_found_handler"
+handler500 = "apps.common.views.server_error_handler"

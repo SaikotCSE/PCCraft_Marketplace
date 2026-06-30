@@ -190,7 +190,7 @@ REST_FRAMEWORK = {
         "login": "30/hour",
         "register": "10/hour",
     },
-    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "DEFAULT_SCHEMA_CLASS": "apps.common.schema.EnvelopeAutoSchema",
     "DEFAULT_PARSER_CONTEXT": {"request": None},
     "TEST_REQUEST_DEFAULT_FORMAT": "json",
 }

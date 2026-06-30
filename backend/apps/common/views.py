@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from django.db import connection
+from django.http import JsonResponse
 from django.utils import timezone
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
@@ -44,6 +45,47 @@ class HealthCheckView(APIView):
                 "now": timezone.now().isoformat(),
             }
         )
+
+
+# ---------------------------------------------------------------------------
+# Top-level Django error handlers (handler400/403/404/500)
+#
+# Each function is referenced from ``config/urls.py`` and produces a JSON
+# envelope rather than Django's default HTML response. We use
+# ``JsonResponse`` directly here (no DRF machinery) so the handlers still
+# work even if ``APIView`` is misconfigured.
+# ---------------------------------------------------------------------------
+def _envelope_error(status_code: int, code: str, message: str):
+    """Render the standard ``{success:false, error:{...}}`` JSON envelope."""
+    return JsonResponse(
+        {
+            "success": False,
+            "data": None,
+            "meta": {},
+            "error": {"code": code, "message": message, "fields": {}},
+        },
+        status=status_code,
+    )
+
+
+def bad_request_handler(request, exception=None):
+    """Django ``handler400`` -- 400 Bad Request envelope."""
+    return _envelope_error(400, "bad_request", "The request could not be parsed.")
+
+
+def permission_denied_handler(request, exception=None):
+    """Django ``handler403`` -- 403 Forbidden envelope."""
+    return _envelope_error(403, "permission_denied", "You do not have access to this resource.")
+
+
+def not_found_handler(request, exception=None):
+    """Django ``handler404`` -- 404 Not Found envelope."""
+    return _envelope_error(404, "not_found", "The requested resource was not found.")
+
+
+def server_error_handler(request, exception=None):
+    """Django ``handler500`` -- 500 Server Error envelope."""
+    return _envelope_error(500, "server_error", "An unexpected server error occurred.")
 
 
 # Module 0 backwards-compat alias -- used by urls.py imports below.
