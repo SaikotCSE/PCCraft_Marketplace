@@ -184,6 +184,8 @@ export const router = createBrowserRouter([
         ],
       },
 
+      // ----- explicit /not-found (programmatic navigation target) -----
+      { path: ROUTE_PATHS.NOT_FOUND_LITERAL, element: withSuspense(NotFoundPage) },
       // ----- catch-all -----
       { path: ROUTE_PATHS.NOT_FOUND, element: withSuspense(NotFoundPage) },
     ],

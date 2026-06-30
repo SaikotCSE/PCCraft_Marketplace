@@ -72,6 +72,7 @@ export const ROUTE_PATHS = Object.freeze({
 
   // ----- fallbacks -----
   NOT_FOUND: '*',
+  NOT_FOUND_LITERAL: '/not-found',
 });
 
 /** Build a concrete URL from a template by substituting :params. */
@@ -136,6 +137,8 @@ export const paths = {
   adminCategories: () => ROUTE_PATHS.ADMIN_CATEGORIES,
   adminCategoryNew: () => ROUTE_PATHS.ADMIN_CATEGORY_NEW,
   adminCategoryEdit: (slug) => buildPath(ROUTE_PATHS.ADMIN_CATEGORY_EDIT, { slug }),
+
+  notFound: () => ROUTE_PATHS.NOT_FOUND_LITERAL,
 };
 
 // Nested `ROUTES` is the convenient short-hand used by pages:

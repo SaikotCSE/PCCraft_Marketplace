@@ -157,6 +157,11 @@ api.interceptors.response.use(
 
     // Surface backend error messages when available.
     const envelope = error.response.data;
+    // Normalize per-field validation errors onto error.fields so forms can
+    // call `setError(field, { message })` directly (spec Module 12 §3).
+    if (envelope?.error?.fields && typeof envelope.error.fields === 'object') {
+      error.fields = envelope.error.fields;
+    }
     if (envelope?.error?.message) {
       toast.error(envelope.error.message);
     } else if (typeof envelope === 'string') {
@@ -166,5 +171,31 @@ api.interceptors.response.use(
     return Promise.reject(error);
   },
 );
+
+/**
+ * Helper for forms: walk the server's `error.fields` map and call
+ * ``setError(field, { type: 'server', message })`` for each entry.
+ * Falls back to a single ``root`` error if no field map exists.
+ *
+ * Usage inside a useMutation ``onError``:
+ *   onError: (err) => mapServerErrorsToForm(err, setError)
+ */
+export const mapServerErrorsToForm = (error, setError) => {
+  if (typeof setError !== 'function') return;
+  if (error?.fields && typeof error.fields === 'object') {
+    for (const [field, messages] of Object.entries(error.fields)) {
+      const message = Array.isArray(messages) ? messages[0] : messages;
+      if (message) {
+        setError(field, { type: 'server', message: String(message) });
+      }
+    }
+    return;
+  }
+  const message =
+    error?.response?.data?.error?.message ||
+    error?.message ||
+    'Unexpected error — please try again.';
+  setError('root', { type: 'server', message });
+};
 
 export default api;
