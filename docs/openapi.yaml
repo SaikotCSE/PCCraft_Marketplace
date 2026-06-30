@@ -5,6 +5,41 @@ info:
   description: REST API for the PCCraft Marketplace platform -- multi-vendor PC components
     e-commerce with recommendations and a data-driven compatibility engine.
 paths:
+  /api/v1/accounts/change-password/:
+    post:
+      operationId: accounts_change_password_create
+      description: |-
+        ``POST /api/v1/auth/change-password/`` -- authenticated.
+
+        Body: ``{current_password, new_password, confirm_new_password}``.
+        On success the new password is hashed with Django's password hasher
+        and the row is saved. With SimpleJWT there are no Django sessions to
+        keep alive (JWT is self-contained), but we still call
+        ``update_session_auth_hash`` defensively so DRF's request.user and
+        any session-backed middleware see the new hash.
+      tags:
+      - accounts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/accounts/login/:
     post:
       operationId: accounts_login_create
@@ -40,7 +75,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Login'
+                $ref: '#/components/schemas/SuccessEnvelope'
           description: ''
   /api/v1/accounts/logout/:
     post:
@@ -48,11 +83,27 @@ paths:
       description: '``POST /api/v1/auth/logout/`` -- blacklist the refresh token.'
       tags:
       - accounts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+        required: true
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/accounts/profile/:
     get:
       operationId: accounts_profile_retrieve
@@ -69,7 +120,11 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
     patch:
       operationId: accounts_profile_partial_update
       description: |-
@@ -81,11 +136,26 @@ paths:
         * ADMIN    → UserProfileSerializer (admin profile edits are minimal)
       tags:
       - accounts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/accounts/register/customer/:
     post:
       operationId: accounts_register_customer_create
@@ -111,7 +181,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CustomerRegister'
+                $ref: '#/components/schemas/SuccessEnvelope'
           description: ''
   /api/v1/accounts/register/vendor/:
     post:
@@ -138,7 +208,39 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/VendorRegister'
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
+  /api/v1/accounts/resend-otp/:
+    post:
+      operationId: accounts_resend_otp_create
+      description: |-
+        ``POST /api/v1/auth/resend-otp/`` -- public.
+
+        Body: ``{"email": "..."}``.
+
+        Always returns 200 with a generic success message -- we intentionally
+        do NOT disclose whether the email exists / is already verified, so
+        the endpoint can be safely hit by anyone. Real success/failure
+        conditions are written to the server log for the admin queue.
+      tags:
+      - accounts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestOTPResendRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RequestOTPResendRequest'
+        required: true
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
           description: ''
   /api/v1/accounts/token/refresh/:
     post:
@@ -150,22 +252,81 @@ paths:
         consistent with the rest of the API.
       tags:
       - accounts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+        required: true
       security:
       - {}
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/accounts/vendor/documents/:
     patch:
       operationId: accounts_vendor_documents_partial_update
       description: '``PATCH /api/v1/auth/vendor/documents/`` -- vendor only.'
       tags:
       - accounts
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
+  /api/v1/accounts/verify-email/:
+    post:
+      operationId: accounts_verify_email_create
+      description: |-
+        ``POST /api/v1/auth/verify-email/`` -- public.
+
+        Body: ``{"email": "...", "code": "123456"}``.
+
+        Success returns ``{access, refresh, user}`` mirroring the login
+        envelope so the frontend can simply reuse its ``useAuthStore.setAuth``
+        flow after a successful verify -- no second round-trip required.
+      tags:
+      - accounts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyOTPRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/VerifyOTPRequest'
+        required: true
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/addresses/:
     get:
       operationId: addresses_retrieve
@@ -176,17 +337,37 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
     post:
       operationId: addresses_create
       description: '``GET / POST /api/v1/addresses/``.'
       tags:
       - addresses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+        required: true
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/addresses/{address_id}/:
     get:
       operationId: addresses_retrieve_2
@@ -204,7 +385,11 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
     patch:
       operationId: addresses_partial_update
       description: '``GET/PATCH/DELETE /api/v1/addresses/{id}/``.'
@@ -217,11 +402,26 @@ paths:
         required: true
       tags:
       - addresses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
     delete:
       operationId: addresses_destroy
       description: '``GET/PATCH/DELETE /api/v1/addresses/{id}/``.'
@@ -252,11 +452,27 @@ paths:
         required: true
       tags:
       - addresses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+        required: true
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/admin/analytics/category-distribution/:
     get:
       operationId: admin_analytics_category_distribution_retrieve
@@ -267,18 +483,32 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/admin/analytics/orders-over-time/:
     get:
       operationId: admin_analytics_orders_over_time_retrieve
-      description: '``GET /api/v1/dashboard/orders-over-time/?days=30``'
+      description: |-
+        ``GET /api/v1/dashboard/orders-over-time/?range=7d|30d|90d``
+
+        Accepts ``?range=`` (preferred, per spec §Module 9) and ``?days=``
+        (legacy escape hatch for custom windows). Response echoes the
+        resolved range under ``meta.range`` so the React filter chips can
+        highlight the active window without re-parsing the URL.
       tags:
       - admin
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/admin/analytics/overview/:
     get:
       operationId: admin_analytics_overview_retrieve
@@ -289,18 +519,26 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/admin/analytics/revenue-over-time/:
     get:
       operationId: admin_analytics_revenue_over_time_retrieve
-      description: '``GET /api/v1/dashboard/revenue-over-time/?days=30``'
+      description: '``GET /api/v1/dashboard/revenue-over-time/?range=7d|30d|90d``'
       tags:
       - admin
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/admin/analytics/top-products/:
     get:
       operationId: admin_analytics_top_products_retrieve
@@ -311,7 +549,11 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/admin/analytics/top-vendors/:
     get:
       operationId: admin_analytics_top_vendors_retrieve
@@ -322,18 +564,26 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/admin/analytics/user-growth/:
     get:
       operationId: admin_analytics_user_growth_retrieve
-      description: '``GET /api/v1/dashboard/user-growth/?days=30``'
+      description: '``GET /api/v1/dashboard/user-growth/?range=7d|30d|90d``'
       tags:
       - admin
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/admin/brands/:
     get:
       operationId: admin_brands_retrieve
@@ -344,17 +594,37 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
     post:
       operationId: admin_brands_create
       description: '``GET /`` paginated list, ``POST /`` create.'
       tags:
       - admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+        required: true
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/admin/brands/{slug}/:
     get:
       operationId: admin_brands_retrieve_2
@@ -371,7 +641,11 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
     patch:
       operationId: admin_brands_partial_update
       description: '``GET / PATCH / DELETE /api/v1/admin/brands/{slug}/``.'
@@ -383,11 +657,26 @@ paths:
         required: true
       tags:
       - admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
     delete:
       operationId: admin_brands_destroy
       description: '``GET / PATCH / DELETE /api/v1/admin/brands/{slug}/``.'
@@ -416,11 +705,26 @@ paths:
         required: true
       tags:
       - admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/admin/categories/:
     get:
       operationId: admin_categories_retrieve
@@ -431,17 +735,37 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
     post:
       operationId: admin_categories_create
       description: '``GET /`` paginated list, ``POST /`` create.'
       tags:
       - admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+        required: true
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/admin/categories/{slug}/:
     get:
       operationId: admin_categories_retrieve_2
@@ -458,7 +782,11 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
     patch:
       operationId: admin_categories_partial_update
       description: '``GET / PATCH / DELETE /api/v1/admin/categories/{slug}/``.'
@@ -470,11 +798,26 @@ paths:
         required: true
       tags:
       - admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
     delete:
       operationId: admin_categories_destroy
       description: '``GET / PATCH / DELETE /api/v1/admin/categories/{slug}/``.'
@@ -503,11 +846,26 @@ paths:
         required: true
       tags:
       - admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/admin/categories/tree/:
     get:
       operationId: admin_categories_tree_retrieve
@@ -518,7 +876,11 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/admin/orders/:
     get:
       operationId: admin_orders_retrieve
@@ -533,7 +895,11 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/admin/orders/{order_number}/:
     get:
       operationId: admin_orders_retrieve_2
@@ -551,7 +917,11 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/admin/products/:
     get:
       operationId: admin_products_retrieve
@@ -562,7 +932,11 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/admin/products/{product_id}/:
     get:
       operationId: admin_products_retrieve_2
@@ -580,7 +954,11 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
     delete:
       operationId: admin_products_destroy
       description: '``GET / DELETE /api/v1/admin/products/{id}/``.'
@@ -599,9 +977,14 @@ paths:
         '204':
           description: No response body
   /api/v1/admin/products/{product_id}/moderate/:
-    post:
-      operationId: admin_products_moderate_create
-      description: '``POST /api/v1/admin/products/{id}/moderate/`` -- status flip.'
+    patch:
+      operationId: admin_products_moderate_partial_update
+      description: |-
+        ``PATCH /api/v1/admin/products/{id}/moderate/`` -- status flip.
+
+        Allows admins to move a product through any ``ProductStatus`` value
+        (draft → published → archived → suspended, etc.), which is broader than
+        the binary hide/restore surface in ``/hide/`` and ``/restore/``.
       parameters:
       - in: path
         name: product_id
@@ -611,11 +994,114 @@ paths:
         required: true
       tags:
       - admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
       security:
       - jwtAuth: []
       responses:
         '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
+  /api/v1/admin/products/{slug}/:
+    delete:
+      operationId: admin_products_destroy_2
+      description: |-
+        ``DELETE /api/v1/admin/products/{slug}/`` — permanent removal.
+
+        Distinct from the UUID-keyed DELETE which performs a *soft* delete
+        (archive). The slug-keyed variant honors the spec line 3171
+        "(hard delete — requires admin confirmation)" and is gated behind
+        the page's confirm dialog.
+
+        Body (optional): ``{"reason": "..."}`` recorded in the audit log.
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - admin
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
           description: No response body
+  /api/v1/admin/products/{slug}/hide/:
+    patch:
+      operationId: admin_products_hide_partial_update
+      description: |-
+        ``PATCH /api/v1/admin/products/{slug}/hide/`` — set status=HIDDEN.
+
+        Body (optional): ``{"reason": "..."}`` recorded in the audit log.
+        Idempotent: a product already HIDDEN returns the current row without
+        rewriting the audit log twice.
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
+  /api/v1/admin/products/{slug}/restore/:
+    patch:
+      operationId: admin_products_restore_partial_update
+      description: |-
+        ``PATCH /api/v1/admin/products/{slug}/restore/`` — set status=ACTIVE.
+
+        Body (optional): ``{"reason": "..."}`` recorded in the audit log.
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/admin/returns/:
     get:
       operationId: admin_returns_retrieve
@@ -626,7 +1112,11 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/admin/returns/{return_id}/confirm-refund/:
     patch:
       operationId: admin_returns_confirm_refund_partial_update
@@ -640,11 +1130,26 @@ paths:
         required: true
       tags:
       - admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/admin/returns/{return_id}/process-refund/:
     patch:
       operationId: admin_returns_process_refund_partial_update
@@ -658,11 +1163,26 @@ paths:
         required: true
       tags:
       - admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/admin/reviews/:
     get:
       operationId: admin_reviews_list
@@ -701,7 +1221,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedAdminReviewListList'
+                $ref: '#/components/schemas/PaginatedSuccessEnvelopeList'
           description: ''
   /api/v1/admin/reviews/{id}/:
     get:
@@ -723,11 +1243,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AdminReviewList'
+                $ref: '#/components/schemas/SuccessEnvelope'
           description: ''
   /api/v1/admin/reviews/{id}/hide/:
-    post:
-      operationId: admin_reviews_hide_create
+    patch:
+      operationId: admin_reviews_hide_partial_update
       description: '``/api/v1/admin/reviews/`` family.'
       parameters:
       - in: path
@@ -745,7 +1265,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AdminReviewList'
+                $ref: '#/components/schemas/SuccessEnvelope'
           description: ''
   /api/v1/admin/reviews/{id}/moderate/:
     patch:
@@ -771,7 +1291,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AdminReviewList'
+                $ref: '#/components/schemas/SuccessEnvelope'
           description: ''
   /api/v1/admin/reviews/{id}/reply/:
     delete:
@@ -792,8 +1312,8 @@ paths:
         '204':
           description: No response body
   /api/v1/admin/reviews/{id}/restore/:
-    post:
-      operationId: admin_reviews_restore_create
+    patch:
+      operationId: admin_reviews_restore_partial_update
       description: '``/api/v1/admin/reviews/`` family.'
       parameters:
       - in: path
@@ -811,7 +1331,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AdminReviewList'
+                $ref: '#/components/schemas/SuccessEnvelope'
           description: ''
   /api/v1/admin/users/:
     get:
@@ -827,7 +1347,11 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/admin/users/{user_id}/:
     delete:
       operationId: admin_users_destroy
@@ -847,9 +1371,9 @@ paths:
         '204':
           description: No response body
   /api/v1/admin/users/{user_id}/activate/:
-    post:
-      operationId: admin_users_activate_create
-      description: '``POST /api/v1/admin/users/{id}/activate/``.'
+    patch:
+      operationId: admin_users_activate_partial_update
+      description: '``PATCH /api/v1/admin/users/{id}/activate/``.'
       parameters:
       - in: path
         name: user_id
@@ -859,11 +1383,26 @@ paths:
         required: true
       tags:
       - admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/admin/users/{user_id}/change-role/:
     patch:
       operationId: admin_users_change_role_partial_update
@@ -878,15 +1417,31 @@ paths:
         required: true
       tags:
       - admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/admin/users/{user_id}/suspend/:
-    post:
-      operationId: admin_users_suspend_create
-      description: '``POST /api/v1/admin/users/{id}/suspend/``.'
+    patch:
+      operationId: admin_users_suspend_partial_update
+      description: '``PATCH /api/v1/admin/users/{id}/suspend/`` body ``{"reason":
+        "..."}``.'
       parameters:
       - in: path
         name: user_id
@@ -896,15 +1451,30 @@ paths:
         required: true
       tags:
       - admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/admin/users/{user_id}/unlock/:
-    post:
-      operationId: admin_users_unlock_create
-      description: '``POST /api/v1/admin/users/{id}/unlock/`` -- clears lockout state.'
+    patch:
+      operationId: admin_users_unlock_partial_update
+      description: '``PATCH /api/v1/admin/users/{id}/unlock/`` -- clears lockout state.'
       parameters:
       - in: path
         name: user_id
@@ -914,11 +1484,26 @@ paths:
         required: true
       tags:
       - admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/admin/vendors/:
     get:
       operationId: admin_vendors_retrieve
@@ -929,11 +1514,15 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/admin/vendors/{vendor_id}/approve/:
-    post:
-      operationId: admin_vendors_approve_create
-      description: '``POST /api/v1/admin/vendors/{id}/approve/``.'
+    patch:
+      operationId: admin_vendors_approve_partial_update
+      description: '``PATCH /api/v1/admin/vendors/{id}/approve/``.'
       parameters:
       - in: path
         name: vendor_id
@@ -942,15 +1531,30 @@ paths:
         required: true
       tags:
       - admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/admin/vendors/{vendor_id}/reject/:
-    post:
-      operationId: admin_vendors_reject_create
-      description: '``POST /api/v1/admin/vendors/{id}/reject/`` -- body ``{reason}``.'
+    patch:
+      operationId: admin_vendors_reject_partial_update
+      description: '``PATCH /api/v1/admin/vendors/{id}/reject/`` -- body ``{reason}``.'
       parameters:
       - in: path
         name: vendor_id
@@ -959,15 +1563,27 @@ paths:
         required: true
       tags:
       - admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/admin/vendors/{vendor_id}/request-info/:
-    post:
-      operationId: admin_vendors_request_info_create
-      description: '``POST /api/v1/admin/vendors/{id}/request-info/`` -- body ``{message}``.'
+    patch:
+      operationId: admin_vendors_request_info_partial_update
+      description: '``PATCH /api/v1/admin/vendors/{id}/request-info/`` -- body ``{message}``.'
       parameters:
       - in: path
         name: vendor_id
@@ -976,11 +1592,23 @@ paths:
         required: true
       tags:
       - admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/admin/vendors/pending/:
     get:
       operationId: admin_vendors_pending_retrieve
@@ -996,7 +1624,11 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/analytics/search/:
     get:
       operationId: analytics_search_retrieve
@@ -1007,7 +1639,46 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
+  /api/v1/auth/change-password/:
+    post:
+      operationId: auth_change_password_create
+      description: |-
+        ``POST /api/v1/auth/change-password/`` -- authenticated.
+
+        Body: ``{current_password, new_password, confirm_new_password}``.
+        On success the new password is hashed with Django's password hasher
+        and the row is saved. With SimpleJWT there are no Django sessions to
+        keep alive (JWT is self-contained), but we still call
+        ``update_session_auth_hash`` defensively so DRF's request.user and
+        any session-backed middleware see the new hash.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/auth/login/:
     post:
       operationId: auth_login_create
@@ -1043,7 +1714,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Login'
+                $ref: '#/components/schemas/SuccessEnvelope'
           description: ''
   /api/v1/auth/logout/:
     post:
@@ -1051,11 +1722,27 @@ paths:
       description: '``POST /api/v1/auth/logout/`` -- blacklist the refresh token.'
       tags:
       - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+        required: true
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/auth/profile/:
     get:
       operationId: auth_profile_retrieve
@@ -1072,7 +1759,11 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
     patch:
       operationId: auth_profile_partial_update
       description: |-
@@ -1084,11 +1775,26 @@ paths:
         * ADMIN    → UserProfileSerializer (admin profile edits are minimal)
       tags:
       - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/auth/register/customer/:
     post:
       operationId: auth_register_customer_create
@@ -1114,7 +1820,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CustomerRegister'
+                $ref: '#/components/schemas/SuccessEnvelope'
           description: ''
   /api/v1/auth/register/vendor/:
     post:
@@ -1141,7 +1847,39 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/VendorRegister'
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
+  /api/v1/auth/resend-otp/:
+    post:
+      operationId: auth_resend_otp_create
+      description: |-
+        ``POST /api/v1/auth/resend-otp/`` -- public.
+
+        Body: ``{"email": "..."}``.
+
+        Always returns 200 with a generic success message -- we intentionally
+        do NOT disclose whether the email exists / is already verified, so
+        the endpoint can be safely hit by anyone. Real success/failure
+        conditions are written to the server log for the admin queue.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestOTPResendRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RequestOTPResendRequest'
+        required: true
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
           description: ''
   /api/v1/auth/token/refresh/:
     post:
@@ -1153,22 +1891,81 @@ paths:
         consistent with the rest of the API.
       tags:
       - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+        required: true
       security:
       - {}
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/auth/vendor/documents/:
     patch:
       operationId: auth_vendor_documents_partial_update
       description: '``PATCH /api/v1/auth/vendor/documents/`` -- vendor only.'
       tags:
       - auth
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
+  /api/v1/auth/verify-email/:
+    post:
+      operationId: auth_verify_email_create
+      description: |-
+        ``POST /api/v1/auth/verify-email/`` -- public.
+
+        Body: ``{"email": "...", "code": "123456"}``.
+
+        Success returns ``{access, refresh, user}`` mirroring the login
+        envelope so the frontend can simply reuse its ``useAuthStore.setAuth``
+        flow after a successful verify -- no second round-trip required.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyOTPRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/VerifyOTPRequest'
+        required: true
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/brands/:
     get:
       operationId: brands_retrieve
@@ -1180,17 +1977,37 @@ paths:
       - {}
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
     post:
       operationId: brands_create
       description: '``GET /`` public; ``POST /`` admin only.'
       tags:
       - brands
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+        required: true
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/brands/{slug}/:
     get:
       operationId: brands_retrieve_2
@@ -1208,7 +2025,11 @@ paths:
       - {}
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
     patch:
       operationId: brands_partial_update
       description: '``GET / PATCH / DELETE /api/v1/brands/{slug}/``.'
@@ -1220,11 +2041,26 @@ paths:
         required: true
       tags:
       - brands
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
     delete:
       operationId: brands_destroy
       description: '``GET / PATCH / DELETE /api/v1/brands/{slug}/``.'
@@ -1251,17 +2087,37 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
     post:
       operationId: builds_create
       description: List (GET) or create (POST) PC builds for the authenticated user.
       tags:
       - builds
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+        required: true
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/builds/{id}/:
     get:
       operationId: builds_retrieve_2
@@ -1278,7 +2134,11 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
     patch:
       operationId: builds_partial_update
       description: Retrieve (GET), update (PATCH), or delete (DELETE) a single build.
@@ -1290,11 +2150,26 @@ paths:
         required: true
       tags:
       - builds
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
     delete:
       operationId: builds_destroy
       description: Retrieve (GET), update (PATCH), or delete (DELETE) a single build.
@@ -1336,7 +2211,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PCBuildRead'
+                $ref: '#/components/schemas/SuccessEnvelope'
           description: ''
   /api/v1/cart/:
     get:
@@ -1350,7 +2225,11 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
     delete:
       operationId: cart_destroy
       description: |-
@@ -1384,11 +2263,27 @@ paths:
       description: '``POST /api/v1/cart/items/`` -- add a product to the cart.'
       tags:
       - cart
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+        required: true
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/cart/items/{item_id}/:
     patch:
       operationId: cart_items_partial_update
@@ -1402,11 +2297,26 @@ paths:
         required: true
       tags:
       - cart
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
     delete:
       operationId: cart_items_destroy
       description: '``PATCH/DELETE /api/v1/cart/items/{id}/`` -- modify a single line.'
@@ -1435,17 +2345,37 @@ paths:
       - {}
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
     post:
       operationId: categories_create
       description: '``GET /`` public tree (or flat); ``POST /`` admin-only create.'
       tags:
       - categories
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+        required: true
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/categories/{slug}/:
     get:
       operationId: categories_retrieve_2
@@ -1463,7 +2393,11 @@ paths:
       - {}
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
     patch:
       operationId: categories_partial_update
       description: '``GET / PATCH / DELETE /api/v1/categories/{slug}/``.'
@@ -1475,11 +2409,26 @@ paths:
         required: true
       tags:
       - categories
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
     delete:
       operationId: categories_destroy
       description: '``GET / PATCH / DELETE /api/v1/categories/{slug}/``.'
@@ -1510,7 +2459,11 @@ paths:
       - {}
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/common/ping/:
     get:
       operationId: common_ping_retrieve
@@ -1521,7 +2474,11 @@ paths:
       - {}
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/compatibility/attributes/:
     get:
       operationId: compatibility_attributes_list
@@ -1559,7 +2516,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedCompatibilityAttributeList'
+                $ref: '#/components/schemas/PaginatedSuccessEnvelopeList'
           description: ''
     post:
       operationId: compatibility_attributes_create
@@ -1584,7 +2541,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CompatibilityAttribute'
+                $ref: '#/components/schemas/SuccessEnvelope'
           description: ''
   /api/v1/compatibility/attributes/{id}/:
     get:
@@ -1605,7 +2562,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CompatibilityAttribute'
+                $ref: '#/components/schemas/SuccessEnvelope'
           description: ''
     put:
       operationId: compatibility_attributes_update
@@ -1637,7 +2594,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CompatibilityAttribute'
+                $ref: '#/components/schemas/SuccessEnvelope'
           description: ''
     patch:
       operationId: compatibility_attributes_partial_update
@@ -1668,7 +2625,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CompatibilityAttribute'
+                $ref: '#/components/schemas/SuccessEnvelope'
           description: ''
     delete:
       operationId: compatibility_attributes_destroy
@@ -1696,17 +2653,37 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
     post:
       operationId: compatibility_builds_create
       description: List (GET) or create (POST) PC builds for the authenticated user.
       tags:
       - compatibility
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+        required: true
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/compatibility/builds/{id}/:
     get:
       operationId: compatibility_builds_retrieve_2
@@ -1723,7 +2700,11 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
     patch:
       operationId: compatibility_builds_partial_update
       description: Retrieve (GET), update (PATCH), or delete (DELETE) a single build.
@@ -1735,11 +2716,26 @@ paths:
         required: true
       tags:
       - compatibility
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
     delete:
       operationId: compatibility_builds_destroy
       description: Retrieve (GET), update (PATCH), or delete (DELETE) a single build.
@@ -1781,7 +2777,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PCBuildRead'
+                $ref: '#/components/schemas/SuccessEnvelope'
           description: ''
   /api/v1/compatibility/check/:
     post:
@@ -1794,12 +2790,28 @@ paths:
         detail response so the frontend can share a reducer.
       tags:
       - compatibility
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+        required: true
       security:
       - jwtAuth: []
       - {}
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/compatibility/products/{slot}/:
     get:
       operationId: compatibility_products_list
@@ -1860,7 +2872,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedProductListList'
+                $ref: '#/components/schemas/PaginatedSuccessEnvelopeList'
           description: ''
   /api/v1/compatibility/rules/:
     get:
@@ -1899,7 +2911,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedCompatibilityRuleList'
+                $ref: '#/components/schemas/PaginatedSuccessEnvelopeList'
           description: ''
     post:
       operationId: compatibility_rules_create
@@ -1924,7 +2936,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CompatibilityRule'
+                $ref: '#/components/schemas/SuccessEnvelope'
           description: ''
   /api/v1/compatibility/rules/{id}/:
     get:
@@ -1945,7 +2957,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CompatibilityRule'
+                $ref: '#/components/schemas/SuccessEnvelope'
           description: ''
     put:
       operationId: compatibility_rules_update
@@ -1977,7 +2989,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CompatibilityRule'
+                $ref: '#/components/schemas/SuccessEnvelope'
           description: ''
     patch:
       operationId: compatibility_rules_partial_update
@@ -2008,7 +3020,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CompatibilityRule'
+                $ref: '#/components/schemas/SuccessEnvelope'
           description: ''
     delete:
       operationId: compatibility_rules_destroy
@@ -2036,18 +3048,32 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/dashboard/orders-over-time/:
     get:
       operationId: dashboard_orders_over_time_retrieve
-      description: '``GET /api/v1/dashboard/orders-over-time/?days=30``'
+      description: |-
+        ``GET /api/v1/dashboard/orders-over-time/?range=7d|30d|90d``
+
+        Accepts ``?range=`` (preferred, per spec §Module 9) and ``?days=``
+        (legacy escape hatch for custom windows). Response echoes the
+        resolved range under ``meta.range`` so the React filter chips can
+        highlight the active window without re-parsing the URL.
       tags:
       - dashboard
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/dashboard/overview/:
     get:
       operationId: dashboard_overview_retrieve
@@ -2058,18 +3084,26 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/dashboard/revenue-over-time/:
     get:
       operationId: dashboard_revenue_over_time_retrieve
-      description: '``GET /api/v1/dashboard/revenue-over-time/?days=30``'
+      description: '``GET /api/v1/dashboard/revenue-over-time/?range=7d|30d|90d``'
       tags:
       - dashboard
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/dashboard/top-products/:
     get:
       operationId: dashboard_top_products_retrieve
@@ -2080,7 +3114,11 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/dashboard/top-vendors/:
     get:
       operationId: dashboard_top_vendors_retrieve
@@ -2091,18 +3129,26 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/dashboard/user-growth/:
     get:
       operationId: dashboard_user_growth_retrieve
-      description: '``GET /api/v1/dashboard/user-growth/?days=30``'
+      description: '``GET /api/v1/dashboard/user-growth/?range=7d|30d|90d``'
       tags:
       - dashboard
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/orders/:
     get:
       operationId: orders_retrieve
@@ -2117,7 +3163,11 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
     post:
       operationId: orders_create
       description: |-
@@ -2127,11 +3177,27 @@ paths:
         * ``POST`` -> place an order from the current cart
       tags:
       - orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+        required: true
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/orders/{order_number}/:
     get:
       operationId: orders_retrieve_2
@@ -2148,7 +3214,11 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/orders/{order_number}/cancel/:
     post:
       operationId: orders_cancel_create
@@ -2161,11 +3231,27 @@ paths:
         required: true
       tags:
       - orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+        required: true
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/orders/items/{item_id}/return/:
     post:
       operationId: orders_items_return_create
@@ -2183,11 +3269,27 @@ paths:
         required: true
       tags:
       - orders
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+        required: true
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/products/:
     get:
       operationId: products_list
@@ -2261,7 +3363,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedProductListList'
+                $ref: '#/components/schemas/PaginatedSuccessEnvelopeList'
           description: ''
   /api/v1/products/{slug}/:
     get:
@@ -2283,7 +3385,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProductDetail'
+                $ref: '#/components/schemas/SuccessEnvelope'
           description: ''
   /api/v1/products/{slug}/can-review/:
     get:
@@ -2309,7 +3411,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ReviewList'
+                $ref: '#/components/schemas/SuccessEnvelope'
           description: ''
   /api/v1/products/{slug}/rating-breakdown/:
     get:
@@ -2335,7 +3437,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ReviewList'
+                $ref: '#/components/schemas/SuccessEnvelope'
           description: ''
   /api/v1/products/{slug}/reviews/:
     get:
@@ -2385,7 +3487,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedReviewListList'
+                $ref: '#/components/schemas/PaginatedSuccessEnvelopeList'
           description: ''
     post:
       operationId: products_reviews_create
@@ -2410,7 +3512,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ReviewList'
+                $ref: '#/components/schemas/SuccessEnvelope'
           description: ''
   /api/v1/products/{slug}/track-view/:
     post:
@@ -2449,7 +3551,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProductList'
+                $ref: '#/components/schemas/SuccessEnvelope'
           description: ''
   /api/v1/products/search/:
     get:
@@ -2465,7 +3567,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProductList'
+                $ref: '#/components/schemas/SuccessEnvelope'
           description: ''
   /api/v1/products/trending/:
     get:
@@ -2485,11 +3587,12 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProductList'
+                $ref: '#/components/schemas/SuccessEnvelope'
           description: ''
   /api/v1/recommendations/{slug}/frequently-bought-together/:
     get:
       operationId: recommendations_frequently_bought_together_retrieve
+      description: Co-occurrence recommendations for the given product slug.
       parameters:
       - in: path
         name: slug
@@ -2503,10 +3606,15 @@ paths:
       - {}
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/recommendations/{slug}/similar/:
     get:
       operationId: recommendations_similar_retrieve
+      description: Content-based recommendations for the given product slug.
       parameters:
       - in: path
         name: slug
@@ -2520,7 +3628,11 @@ paths:
       - {}
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/recommendations/personalized/:
     get:
       operationId: recommendations_personalized_retrieve
@@ -2531,7 +3643,11 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/recommendations/recently-viewed/:
     get:
       operationId: recommendations_recently_viewed_retrieve
@@ -2543,7 +3659,11 @@ paths:
       - {}
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/recommendations/trending/:
     get:
       operationId: recommendations_trending_retrieve
@@ -2560,7 +3680,11 @@ paths:
       - {}
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/returns/:
     get:
       operationId: returns_retrieve
@@ -2571,7 +3695,11 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/returns/{return_id}/:
     get:
       operationId: returns_retrieve_2
@@ -2589,7 +3717,11 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/returns/{return_id}/ship-back/:
     post:
       operationId: returns_ship_back_create
@@ -2604,11 +3736,27 @@ paths:
         required: true
       tags:
       - returns
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+        required: true
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/reviews/{id}/:
     get:
       operationId: reviews_retrieve
@@ -2630,7 +3778,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ReviewList'
+                $ref: '#/components/schemas/SuccessEnvelope'
           description: ''
     put:
       operationId: reviews_update
@@ -2651,7 +3799,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ReviewList'
+                $ref: '#/components/schemas/SuccessEnvelope'
           description: ''
     patch:
       operationId: reviews_partial_update
@@ -2672,7 +3820,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ReviewList'
+                $ref: '#/components/schemas/SuccessEnvelope'
           description: ''
     delete:
       operationId: reviews_destroy
@@ -2711,7 +3859,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ReviewList'
+                $ref: '#/components/schemas/SuccessEnvelope'
           description: ''
   /api/v1/reviews/can-review/:
     get:
@@ -2732,7 +3880,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ReviewList'
+                $ref: '#/components/schemas/SuccessEnvelope'
           description: ''
   /api/v1/search/:
     get:
@@ -2745,7 +3893,11 @@ paths:
       - {}
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/search/suggestions/:
     get:
       operationId: search_suggestions_retrieve
@@ -2762,7 +3914,11 @@ paths:
       - {}
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/search/trending/:
     get:
       operationId: search_trending_retrieve
@@ -2775,7 +3931,33 @@ paths:
       - {}
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
+  /api/v1/search/trending-products/:
+    get:
+      operationId: search_trending_products_retrieve
+      description: |-
+        Public product suggestions for the no-results empty state.
+
+        Spec §11.1 frontend: "No-results empty state: search icon, 'No results
+        for ...', suggested categories or trending products below". Returns
+        up to 8 active, in-stock products ordered by ``total_sold`` then
+        ``average_rating`` so the row feels curated rather than random.
+      tags:
+      - search
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/search/zero-result/:
     get:
       operationId: search_zero_result_retrieve
@@ -2787,7 +3969,11 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/vendor/dashboard/low-stock/:
     get:
       operationId: vendor_dashboard_low_stock_retrieve
@@ -2798,7 +3984,11 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/vendor/dashboard/overview/:
     get:
       operationId: vendor_dashboard_overview_retrieve
@@ -2809,7 +3999,11 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/vendor/dashboard/revenue-over-time/:
     get:
       operationId: vendor_dashboard_revenue_over_time_retrieve
@@ -2820,7 +4014,11 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/vendor/dashboard/top-products/:
     get:
       operationId: vendor_dashboard_top_products_retrieve
@@ -2831,7 +4029,11 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/vendor/orders/:
     get:
       operationId: vendor_orders_retrieve
@@ -2846,7 +4048,11 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/vendor/orders/{order_number}/:
     get:
       operationId: vendor_orders_retrieve_2
@@ -2864,7 +4070,11 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/vendor/orders/items/{item_id}/status/:
     patch:
       operationId: vendor_orders_items_status_partial_update
@@ -2878,11 +4088,26 @@ paths:
         required: true
       tags:
       - vendor
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/vendor/products/:
     get:
       operationId: vendor_products_list
@@ -2921,7 +4146,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedProductWriteList'
+                $ref: '#/components/schemas/PaginatedSuccessEnvelopeList'
           description: ''
     post:
       operationId: vendor_products_create
@@ -2947,7 +4172,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProductWrite'
+                $ref: '#/components/schemas/SuccessEnvelope'
           description: ''
   /api/v1/vendor/products/{slug}/:
     get:
@@ -2968,7 +4193,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProductWrite'
+                $ref: '#/components/schemas/SuccessEnvelope'
           description: ''
     patch:
       operationId: vendor_products_partial_update
@@ -2999,7 +4224,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProductUpdate'
+                $ref: '#/components/schemas/SuccessEnvelope'
           description: ''
     delete:
       operationId: vendor_products_destroy
@@ -3048,7 +4273,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProductWrite'
+                $ref: '#/components/schemas/SuccessEnvelope'
           description: ''
   /api/v1/vendor/products/{slug}/images/{image_id}/set-primary/:
     patch:
@@ -3085,7 +4310,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProductWrite'
+                $ref: '#/components/schemas/SuccessEnvelope'
           description: ''
   /api/v1/vendor/products/{slug}/images/by-id/{image_id}/:
     delete:
@@ -3140,7 +4365,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProductWrite'
+                $ref: '#/components/schemas/SuccessEnvelope'
           description: ''
   /api/v1/vendor/returns/:
     get:
@@ -3152,7 +4377,11 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/vendor/returns/{return_id}/mark-received/:
     patch:
       operationId: vendor_returns_mark_received_partial_update
@@ -3166,11 +4395,26 @@ paths:
         required: true
       tags:
       - vendor
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/vendor/returns/{return_id}/review/:
     patch:
       operationId: vendor_returns_review_partial_update
@@ -3184,11 +4428,26 @@ paths:
         required: true
       tags:
       - vendor
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSuccessEnvelopeRequest'
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/vendor/reviews/:
     get:
       operationId: vendor_reviews_list
@@ -3227,7 +4486,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedReviewListList'
+                $ref: '#/components/schemas/PaginatedSuccessEnvelopeList'
           description: ''
   /api/v1/vendor/reviews/{id}/reply/:
     post:
@@ -3249,7 +4508,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ReviewList'
+                $ref: '#/components/schemas/SuccessEnvelope'
           description: ''
     delete:
       operationId: vendor_reviews_reply_destroy
@@ -3277,7 +4536,11 @@ paths:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/wishlist/clear/:
     delete:
       operationId: wishlist_clear_destroy
@@ -3293,11 +4556,27 @@ paths:
       operationId: wishlist_items_create
       tags:
       - wishlist
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+        required: true
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
   /api/v1/wishlist/items/{item_id}/:
     delete:
       operationId: wishlist_items_destroy
@@ -3335,138 +4614,32 @@ paths:
         required: true
       tags:
       - wishlist
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SuccessEnvelopeRequest'
+        required: true
       security:
       - jwtAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+          description: ''
 components:
   schemas:
-    AdminReviewList:
-      type: object
-      description: |-
-        Admin moderation listing shape.
-
-        Adds the moderation flag (``is_hidden``) and the product reference
-        so the admin table can render its columns without a second round
-        trip. ``is_hidden`` is the chip that decides row styling.
-      properties:
-        id:
-          type: string
-          format: uuid
-          readOnly: true
-        user:
-          type: string
-          readOnly: true
-        rating:
-          type: integer
-          readOnly: true
-          description: 1..5 stars. Immutable after creation.
-        title:
-          type: string
-          readOnly: true
-        body:
-          type: string
-          readOnly: true
-        is_verified_purchase:
-          type: boolean
-          readOnly: true
-        helpful_count:
-          type: integer
-          readOnly: true
-        images:
-          type: array
-          items:
-            $ref: '#/components/schemas/ReviewImage'
-          readOnly: true
-        vendor_reply:
-          type: string
-          readOnly: true
-        vendor_replied_at:
-          type: string
-          format: date-time
-          readOnly: true
-          nullable: true
-        vendor_reply_edited_at:
-          type: string
-          format: date-time
-          readOnly: true
-          nullable: true
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-        is_helpful_by_me:
-          type: boolean
-          readOnly: true
-        product:
-          allOf:
-          - $ref: '#/components/schemas/ProductInline'
-          readOnly: true
-        is_hidden:
-          type: boolean
-          readOnly: true
-          description: Admin moderation flag. Hidden reviews are excluded from public
-            listings and product averages.
-        vendor:
-          type: string
-          readOnly: true
-      required:
-      - body
-      - created_at
-      - helpful_count
-      - id
-      - images
-      - is_helpful_by_me
-      - is_hidden
-      - is_verified_purchase
-      - product
-      - rating
-      - title
-      - updated_at
-      - user
-      - vendor
-      - vendor_replied_at
-      - vendor_reply
-      - vendor_reply_edited_at
     BlankEnum:
       enum:
       - ''
-    BrandList:
-      type: object
-      description: Compact representation used in dropdowns and pickers.
-      properties:
-        id:
-          type: string
-          format: uuid
-          readOnly: true
-        name:
-          type: string
-          maxLength: 120
-        slug:
-          type: string
-          maxLength: 140
-          pattern: ^[-a-zA-Z0-9_]+$
-        logo:
-          type: string
-          format: uri
-          nullable: true
-        is_featured:
-          type: boolean
-        is_active:
-          type: boolean
-        product_count:
-          type: integer
-          readOnly: true
-      required:
-      - id
-      - name
-      - product_count
-      - slug
     BrandListRequest:
       type: object
       description: Compact representation used in dropdowns and pickers.
@@ -3503,48 +4676,6 @@ components:
         * `PARTNERSHIP` - Partnership
         * `PVT_LTD` - Private limited
         * `OTHER` - Other
-    CategoryList:
-      type: object
-      description: Compact representation used in dropdowns / breadcrumbs.
-      properties:
-        id:
-          type: string
-          format: uuid
-          readOnly: true
-        name:
-          type: string
-          maxLength: 120
-        slug:
-          type: string
-          maxLength: 140
-          pattern: ^[-a-zA-Z0-9_]+$
-        parent:
-          type: string
-          readOnly: true
-        icon:
-          type: string
-          format: uri
-          nullable: true
-        image:
-          type: string
-          format: uri
-          nullable: true
-          title: Banner image
-        display_order:
-          type: integer
-          maximum: 32767
-          minimum: 0
-        is_active:
-          type: boolean
-        product_count:
-          type: integer
-          readOnly: true
-      required:
-      - id
-      - name
-      - parent
-      - product_count
-      - slug
     CategoryListRequest:
       type: object
       description: Compact representation used in dropdowns / breadcrumbs.
@@ -3576,42 +4707,6 @@ components:
       required:
       - name
       - slug
-    CompatibilityAttribute:
-      type: object
-      description: |-
-        Read/write shape for ``CompatibilityAttribute``.
-
-        All fields are exposed because the admin form needs them and the
-        table is small enough to render without projection.
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        name:
-          type: string
-          description: e.g. 'socket', 'form_factor', 'max_ram_speed_mhz'.
-          maxLength: 64
-        description:
-          type: string
-        data_type:
-          $ref: '#/components/schemas/DataTypeEnum'
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-        is_active:
-          type: boolean
-          readOnly: true
-      required:
-      - created_at
-      - id
-      - is_active
-      - name
-      - updated_at
     CompatibilityAttributeRequest:
       type: object
       description: |-
@@ -3631,81 +4726,6 @@ components:
           $ref: '#/components/schemas/DataTypeEnum'
       required:
       - name
-    CompatibilityRule:
-      type: object
-      description: |-
-        Read/write shape for ``CompatibilityRule``.
-
-        Write input uses slug + name identifiers so admin tooling can talk
-        the same vocabulary as the catalog. The response embeds a richer
-        category representation (id+slug+name) so the UI table doesn't need
-        to refetch.
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        rule_name:
-          type: string
-          description: Unique identifier, e.g. 'CPU_MOBO_SOCKET'.
-          maxLength: 80
-        category_a:
-          type: string
-        category_b:
-          type: string
-        attribute_a:
-          type: string
-          description: e.g. 'socket', 'form_factor', 'max_ram_speed_mhz'.
-        attribute_b:
-          type: string
-          description: e.g. 'socket', 'form_factor', 'max_ram_speed_mhz'.
-        category_a_detail:
-          allOf:
-          - $ref: '#/components/schemas/CategoryList'
-          readOnly: true
-        category_b_detail:
-          allOf:
-          - $ref: '#/components/schemas/CategoryList'
-          readOnly: true
-        attribute_a_detail:
-          allOf:
-          - $ref: '#/components/schemas/CompatibilityAttribute'
-          readOnly: true
-        attribute_b_detail:
-          allOf:
-          - $ref: '#/components/schemas/CompatibilityAttribute'
-          readOnly: true
-        rule_type:
-          $ref: '#/components/schemas/RuleTypeEnum'
-        severity:
-          $ref: '#/components/schemas/SeverityEnum'
-        description:
-          type: string
-          description: Human-readable explanation shown in the UI accordion.
-        is_active:
-          type: boolean
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-      required:
-      - attribute_a
-      - attribute_a_detail
-      - attribute_b
-      - attribute_b_detail
-      - category_a
-      - category_a_detail
-      - category_b
-      - category_b_detail
-      - created_at
-      - description
-      - id
-      - rule_name
-      - rule_type
-      - updated_at
     CompatibilityRuleRequest:
       type: object
       description: |-
@@ -3753,44 +4773,6 @@ components:
       - description
       - rule_name
       - rule_type
-    CustomerRegister:
-      type: object
-      description: |-
-        Customer sign-up body.
-
-        Mirrors the spec's customer registration field list (full_name,
-        email, phone, password, confirm_password, date_of_birth, gender,
-        avatar, accept_terms).
-      properties:
-        full_name:
-          type: string
-          maxLength: 150
-        email:
-          type: string
-          format: email
-        phone:
-          type: string
-          maxLength: 20
-        date_of_birth:
-          type: string
-          format: date
-          nullable: true
-        gender:
-          default: ''
-          oneOf:
-          - $ref: '#/components/schemas/GenderEnum'
-          - $ref: '#/components/schemas/BlankEnum'
-        avatar:
-          type: string
-          format: uri
-          nullable: true
-        accept_terms:
-          type: boolean
-      required:
-      - accept_terms
-      - email
-      - full_name
-      - phone
     CustomerRegisterRequest:
       type: object
       description: |-
@@ -3852,6 +4834,49 @@ components:
         * `STRING` - String
         * `INTEGER` - Integer
         * `JSON_ARRAY` - JSON array
+    ErrorEnvelope:
+      type: object
+      description: Stable ``error`` block returned by ``api_response(..., error=...)``.
+      properties:
+        code:
+          type: string
+          description: Stable machine-readable code, e.g. ``validation_error``.
+        message:
+          type: string
+          description: Human-readable error message.
+        fields:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          description: Per-field validation messages keyed by field name.
+      required:
+      - code
+      - message
+    ErrorEnvelopeRequest:
+      type: object
+      description: Stable ``error`` block returned by ``api_response(..., error=...)``.
+      properties:
+        code:
+          type: string
+          minLength: 1
+          description: Stable machine-readable code, e.g. ``validation_error``.
+        message:
+          type: string
+          minLength: 1
+          description: Human-readable error message.
+        fields:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+              minLength: 1
+          description: Per-field validation messages keyed by field name.
+      required:
+      - code
+      - message
     GenderEnum:
       enum:
       - MALE
@@ -3862,16 +4887,6 @@ components:
         * `MALE` - Male
         * `FEMALE` - Female
         * `PREFER_NOT_TO_SAY` - Prefer not to say
-    Login:
-      type: object
-      description: |-
-        Email + password + role. Roles are validated here so the service
-        layer never sees an invalid role string.
-      properties:
-        role:
-          $ref: '#/components/schemas/RoleEnum'
-      required:
-      - role
     LoginRequest:
       type: object
       description: |-
@@ -3895,82 +4910,7 @@ components:
     NullEnum:
       enum:
       - null
-    PCBuildRead:
-      type: object
-      description: |-
-        Read shape -- nested slots + computed compatibility results.
-
-        The ``slots`` dict always carries every one of the 11 PCBuildSlot
-        keys so the UI can map over a stable list without conditional
-        rendering. Missing products serialise as ``None``.
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        name:
-          type: string
-          readOnly: true
-        status:
-          allOf:
-          - $ref: '#/components/schemas/PCBuildReadStatusEnum'
-          readOnly: true
-        total_price:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
-          readOnly: true
-          description: Sum of selected products' effective prices.
-        share_token:
-          type: string
-          format: uuid
-          readOnly: true
-        is_public:
-          type: boolean
-          readOnly: true
-        user_id:
-          type: string
-          format: uuid
-          nullable: true
-          readOnly: true
-        slots:
-          type: string
-          readOnly: true
-        compatibility_results:
-          type: string
-          readOnly: true
-        wattage:
-          type: string
-          readOnly: true
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-      required:
-      - compatibility_results
-      - created_at
-      - id
-      - is_public
-      - name
-      - share_token
-      - slots
-      - status
-      - total_price
-      - updated_at
-      - user_id
-      - wattage
-    PCBuildReadStatusEnum:
-      enum:
-      - DRAFT
-      - COMPLETE
-      type: string
-      description: |-
-        * `DRAFT` - Draft
-        * `COMPLETE` - Complete
-    PaginatedAdminReviewListList:
+    PaginatedSuccessEnvelopeList:
       type: object
       required:
       - count
@@ -3992,122 +4932,7 @@ components:
         results:
           type: array
           items:
-            $ref: '#/components/schemas/AdminReviewList'
-    PaginatedCompatibilityAttributeList:
-      type: object
-      required:
-      - count
-      - results
-      properties:
-        count:
-          type: integer
-          example: 123
-        next:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=4
-        previous:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=2
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/CompatibilityAttribute'
-    PaginatedCompatibilityRuleList:
-      type: object
-      required:
-      - count
-      - results
-      properties:
-        count:
-          type: integer
-          example: 123
-        next:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=4
-        previous:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=2
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/CompatibilityRule'
-    PaginatedProductListList:
-      type: object
-      required:
-      - count
-      - results
-      properties:
-        count:
-          type: integer
-          example: 123
-        next:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=4
-        previous:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=2
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/ProductList'
-    PaginatedProductWriteList:
-      type: object
-      required:
-      - count
-      - results
-      properties:
-        count:
-          type: integer
-          example: 123
-        next:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=4
-        previous:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=2
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/ProductWrite'
-    PaginatedReviewListList:
-      type: object
-      required:
-      - count
-      - results
-      properties:
-        count:
-          type: integer
-          example: 123
-        next:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=4
-        previous:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=2
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/ReviewList'
+            $ref: '#/components/schemas/SuccessEnvelope'
     PatchedCompatibilityAttributeRequest:
       type: object
       description: |-
@@ -4223,7 +5048,7 @@ components:
         status:
           nullable: true
           oneOf:
-          - $ref: '#/components/schemas/Status729Enum'
+          - $ref: '#/components/schemas/StatusEnum'
           - $ref: '#/components/schemas/NullEnum'
         is_featured:
           type: boolean
@@ -4294,7 +5119,7 @@ components:
           maximum: 2147483647
           minimum: 0
         status:
-          $ref: '#/components/schemas/Status729Enum'
+          $ref: '#/components/schemas/StatusEnum'
         is_featured:
           type: boolean
         weight_kg:
@@ -4312,296 +5137,26 @@ components:
           maximum: 32767
           minimum: 0
         specs: {}
-    ProductDetail:
-      type: object
-      description: Used for the public product page; superset of the list shape.
-      properties:
-        id:
-          type: string
-          format: uuid
-          readOnly: true
-        name:
-          type: string
-          maxLength: 200
-        slug:
-          type: string
-          maxLength: 220
-          pattern: ^[-a-zA-Z0-9_]+$
-        brand:
-          allOf:
-          - $ref: '#/components/schemas/BrandList'
-          readOnly: true
-        category:
-          allOf:
-          - $ref: '#/components/schemas/CategoryList'
-          readOnly: true
-        short_description:
-          type: string
-          maxLength: 500
-        base_price:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
-        discounted_price:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
-          nullable: true
-        effective_price:
-          type: string
-          readOnly: true
-        discount_percent:
-          type: integer
-          readOnly: true
-        stock_quantity:
-          type: integer
-          maximum: 2147483647
-          minimum: 0
-        stock_status:
-          type: string
-          readOnly: true
-        in_stock:
-          type: boolean
-          readOnly: true
-        average_rating:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,1}(?:\.\d{0,2})?$
-        review_count:
-          type: integer
-          maximum: 2147483647
-          minimum: 0
-        total_sold:
-          type: integer
-          maximum: 2147483647
-          minimum: 0
-        is_featured:
-          type: boolean
-        status:
-          $ref: '#/components/schemas/Status729Enum'
-        primary_image:
-          type: string
-          readOnly: true
-        description:
-          type: string
-          readOnly: true
-        specs:
-          readOnly: true
-        dimensions_cm:
-          readOnly: true
-        sku:
-          type: string
-          readOnly: true
-        warranty_months:
-          type: integer
-          readOnly: true
-        weight_kg:
-          type: string
-          readOnly: true
-        low_stock_threshold:
-          type: integer
-          maximum: 2147483647
-          minimum: 0
-        vendor:
-          allOf:
-          - $ref: '#/components/schemas/VendorInline'
-          readOnly: true
-        images:
-          type: array
-          items:
-            $ref: '#/components/schemas/ProductImage'
-          readOnly: true
-        discount_start:
-          type: string
-          format: date-time
-          nullable: true
-        discount_end:
-          type: string
-          format: date-time
-          nullable: true
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-      required:
-      - base_price
-      - brand
-      - category
-      - created_at
-      - description
-      - dimensions_cm
-      - discount_percent
-      - effective_price
-      - id
-      - images
-      - in_stock
-      - name
-      - primary_image
-      - sku
-      - slug
-      - specs
-      - stock_status
-      - updated_at
-      - vendor
-      - warranty_months
-      - weight_kg
-    ProductImage:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-          readOnly: true
-        image:
-          type: string
-          format: uri
-        alt_text:
-          type: string
-          maxLength: 200
-        display_order:
-          type: integer
-          maximum: 32767
-          minimum: 0
-        is_primary:
-          type: boolean
-      required:
-      - id
-      - image
-    ProductInline:
+    PatchedSuccessEnvelopeRequest:
       type: object
       description: |-
-        Smallest possible product shape -- used when a foreign key to
-        Product is embedded in another resource (reviews, cart items,
-        order items, etc.).
+        Envelope wrapped around every 2xx response.
+
+        The ``data`` field is intentionally open (``Serializer`` instead of
+        a typed serializer) so spectacular can still emit a schema even when
+        the view returns a polymorphic payload -- the actual serializer is
+        typically attached via ``@extend_schema`` per view.
       properties:
-        id:
-          type: string
-          format: uuid
-          readOnly: true
-        name:
-          type: string
-          readOnly: true
-        slug:
-          type: string
-          readOnly: true
-          pattern: ^[-a-zA-Z0-9_]+$
-        base_price:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
-          readOnly: true
-        discounted_price:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
-          readOnly: true
-          nullable: true
-        average_rating:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,1}(?:\.\d{0,2})?$
-          readOnly: true
-        review_count:
-          type: integer
-          readOnly: true
-        primary_image:
-          type: string
-          readOnly: true
-      required:
-      - average_rating
-      - base_price
-      - discounted_price
-      - id
-      - name
-      - primary_image
-      - review_count
-      - slug
-    ProductList:
-      type: object
-      description: Used for grid/card views in the catalog.
-      properties:
-        id:
-          type: string
-          format: uuid
-          readOnly: true
-        name:
-          type: string
-          maxLength: 200
-        slug:
-          type: string
-          maxLength: 220
-          pattern: ^[-a-zA-Z0-9_]+$
-        brand:
-          allOf:
-          - $ref: '#/components/schemas/BrandList'
-          readOnly: true
-        category:
-          allOf:
-          - $ref: '#/components/schemas/CategoryList'
-          readOnly: true
-        short_description:
-          type: string
-          maxLength: 500
-        base_price:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
-        discounted_price:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
-          nullable: true
-        effective_price:
-          type: string
-          readOnly: true
-        discount_percent:
-          type: integer
-          readOnly: true
-        stock_quantity:
-          type: integer
-          maximum: 2147483647
-          minimum: 0
-        stock_status:
-          type: string
-          readOnly: true
-        in_stock:
+        success:
           type: boolean
-          readOnly: true
-        average_rating:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,1}(?:\.\d{0,2})?$
-        review_count:
-          type: integer
-          maximum: 2147483647
-          minimum: 0
-        total_sold:
-          type: integer
-          maximum: 2147483647
-          minimum: 0
-        is_featured:
-          type: boolean
-        status:
-          $ref: '#/components/schemas/Status729Enum'
-        primary_image:
-          type: string
-          readOnly: true
-      required:
-      - base_price
-      - brand
-      - category
-      - discount_percent
-      - effective_price
-      - id
-      - in_stock
-      - name
-      - primary_image
-      - slug
-      - stock_status
+        data:
+          description: Endpoint-specific payload.
+        meta:
+          description: Pagination / counts / free-form metadata.
+        error:
+          allOf:
+          - $ref: '#/components/schemas/ErrorEnvelopeRequest'
+          nullable: true
     ProductListRequest:
       type: object
       description: Used for grid/card views in the catalog.
@@ -4646,160 +5201,11 @@ components:
         is_featured:
           type: boolean
         status:
-          $ref: '#/components/schemas/Status729Enum'
+          $ref: '#/components/schemas/StatusEnum'
       required:
       - base_price
       - name
       - slug
-    ProductUpdate:
-      type: object
-      description: For PATCH; all fields optional.
-      properties:
-        name:
-          type: string
-          nullable: true
-          maxLength: 200
-        brand:
-          type: string
-        category:
-          type: string
-        description:
-          type: string
-          nullable: true
-        short_description:
-          type: string
-          nullable: true
-          maxLength: 500
-        base_price:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
-          nullable: true
-        discounted_price:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
-          nullable: true
-        discount_start:
-          type: string
-          format: date-time
-          nullable: true
-        discount_end:
-          type: string
-          format: date-time
-          nullable: true
-        sku:
-          type: string
-          nullable: true
-          description: Unique per vendor.
-          maxLength: 80
-        stock_quantity:
-          type: integer
-          maximum: 2147483647
-          minimum: 0
-          nullable: true
-        low_stock_threshold:
-          type: integer
-          maximum: 2147483647
-          minimum: 0
-          nullable: true
-        status:
-          nullable: true
-          oneOf:
-          - $ref: '#/components/schemas/Status729Enum'
-          - $ref: '#/components/schemas/NullEnum'
-        is_featured:
-          type: boolean
-          nullable: true
-        weight_kg:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,4}(?:\.\d{0,2})?$
-          nullable: true
-          title: Weight (kg)
-        dimensions_cm:
-          nullable: true
-          title: Dimensions (cm)
-          description: '{''l'': 0, ''w'': 0, ''h'': 0}'
-        warranty_months:
-          type: integer
-          maximum: 32767
-          minimum: 0
-          nullable: true
-        specs:
-          nullable: true
-      required:
-      - brand
-      - category
-    ProductWrite:
-      type: object
-      properties:
-        name:
-          type: string
-          maxLength: 200
-        brand:
-          type: string
-        category:
-          type: string
-        description:
-          type: string
-        short_description:
-          type: string
-          maxLength: 500
-        base_price:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
-        discounted_price:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
-          nullable: true
-        discount_start:
-          type: string
-          format: date-time
-          nullable: true
-        discount_end:
-          type: string
-          format: date-time
-          nullable: true
-        sku:
-          type: string
-          description: Unique per vendor.
-          maxLength: 80
-        stock_quantity:
-          type: integer
-          maximum: 2147483647
-          minimum: 0
-        low_stock_threshold:
-          type: integer
-          maximum: 2147483647
-          minimum: 0
-        status:
-          $ref: '#/components/schemas/Status729Enum'
-        is_featured:
-          type: boolean
-        weight_kg:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,4}(?:\.\d{0,2})?$
-          nullable: true
-          title: Weight (kg)
-        dimensions_cm:
-          nullable: true
-          title: Dimensions (cm)
-          description: '{''l'': 0, ''w'': 0, ''h'': 0}'
-        warranty_months:
-          type: integer
-          maximum: 32767
-          minimum: 0
-        specs: {}
-      required:
-      - base_price
-      - brand
-      - category
-      - name
-      - sku
     ProductWriteRequest:
       type: object
       properties:
@@ -4849,7 +5255,7 @@ components:
           maximum: 2147483647
           minimum: 0
         status:
-          $ref: '#/components/schemas/Status729Enum'
+          $ref: '#/components/schemas/StatusEnum'
         is_featured:
           type: boolean
         weight_kg:
@@ -4873,91 +5279,20 @@ components:
       - category
       - name
       - sku
-    ReviewImage:
+    RequestOTPResendRequest:
       type: object
-      description: Read shape for a single review image.  Returns an absolute URL.
+      description: |-
+        Body for ``POST /api/v1/auth/resend-otp/`` -- email only.
+
+        Used both by the signup flow (re-request the first code) and by
+        future password-reset flows (request the reset code).
       properties:
-        id:
+        email:
           type: string
-          format: uuid
-          readOnly: true
-        image:
-          type: string
-          readOnly: true
+          format: email
+          minLength: 1
       required:
-      - id
-      - image
-    ReviewList:
-      type: object
-      description: Public listing / detail shape.
-      properties:
-        id:
-          type: string
-          format: uuid
-          readOnly: true
-        user:
-          type: string
-          readOnly: true
-        rating:
-          type: integer
-          readOnly: true
-          description: 1..5 stars. Immutable after creation.
-        title:
-          type: string
-          readOnly: true
-        body:
-          type: string
-          readOnly: true
-        is_verified_purchase:
-          type: boolean
-          readOnly: true
-        helpful_count:
-          type: integer
-          readOnly: true
-        images:
-          type: array
-          items:
-            $ref: '#/components/schemas/ReviewImage'
-          readOnly: true
-        vendor_reply:
-          type: string
-          readOnly: true
-        vendor_replied_at:
-          type: string
-          format: date-time
-          readOnly: true
-          nullable: true
-        vendor_reply_edited_at:
-          type: string
-          format: date-time
-          readOnly: true
-          nullable: true
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-        is_helpful_by_me:
-          type: boolean
-          readOnly: true
-      required:
-      - body
-      - created_at
-      - helpful_count
-      - id
-      - images
-      - is_helpful_by_me
-      - is_verified_purchase
-      - rating
-      - title
-      - updated_at
-      - user
-      - vendor_replied_at
-      - vendor_reply
-      - vendor_reply_edited_at
+      - email
     RoleEnum:
       enum:
       - customer
@@ -4988,7 +5323,7 @@ components:
       description: |-
         * `ERROR` - Error
         * `WARNING` - Warning
-    Status729Enum:
+    StatusEnum:
       enum:
       - DRAFT
       - ACTIVE
@@ -5002,94 +5337,52 @@ components:
         * `PAUSED` - Paused
         * `ARCHIVED` - Archived
         * `HIDDEN` - Hidden
-    VendorInline:
-      type: object
-      description: Minimal public vendor shape — appears on every product card.
-      properties:
-        id:
-          type: string
-        store_name:
-          type: string
-        store_slug:
-          type: string
-        store_logo:
-          type: string
-          readOnly: true
-      required:
-      - id
-      - store_logo
-      - store_name
-      - store_slug
-    VendorRegister:
+    SuccessEnvelope:
       type: object
       description: |-
-        Vendor sign-up body -- all 4 steps collapsed for the API call.
+        Envelope wrapped around every 2xx response.
 
-        Multipart upload: ``trade_license_doc`` and ``nid_doc`` are required
-        file fields. MIME-type validation happens at the model layer via
-        ``FileMimeTypeValidator`` (set in ``models.py``).
+        The ``data`` field is intentionally open (``Serializer`` instead of
+        a typed serializer) so spectacular can still emit a schema even when
+        the view returns a polymorphic payload -- the actual serializer is
+        typically attached via ``@extend_schema`` per view.
       properties:
-        owner_name:
-          type: string
-          maxLength: 150
-        email:
-          type: string
-          format: email
-        phone:
-          type: string
-          maxLength: 20
-        business_name:
-          type: string
-          maxLength: 180
-        business_type:
-          allOf:
-          - $ref: '#/components/schemas/BusinessTypeEnum'
-          default: SOLE_PROP
-        business_phone:
-          type: string
-          maxLength: 20
-        trade_license_number:
-          type: string
-          maxLength: 80
-        business_address:
-          $ref: '#/components/schemas/_BusinessAddress'
-        trade_license_doc:
-          type: string
-          format: uri
-        nid_number:
-          type: string
-          maxLength: 40
-        nid_doc:
-          type: string
-          format: uri
-        store_name:
-          type: string
-          maxLength: 120
-        store_description:
-          type: string
-        store_contact_email:
-          type: string
-          format: email
-        vendor_return_policy:
-          type: string
-        low_stock_threshold:
-          type: integer
-          maximum: 32767
-          minimum: 1
-          default: 5
-        accept_vendor_terms:
+        success:
           type: boolean
+        data:
+          description: Endpoint-specific payload.
+        meta:
+          description: Pagination / counts / free-form metadata.
+        error:
+          allOf:
+          - $ref: '#/components/schemas/ErrorEnvelope'
+          nullable: true
       required:
-      - accept_vendor_terms
-      - business_address
-      - business_name
-      - email
-      - nid_doc
-      - nid_number
-      - owner_name
-      - phone
-      - trade_license_doc
-      - trade_license_number
+      - data
+      - success
+    SuccessEnvelopeRequest:
+      type: object
+      description: |-
+        Envelope wrapped around every 2xx response.
+
+        The ``data`` field is intentionally open (``Serializer`` instead of
+        a typed serializer) so spectacular can still emit a schema even when
+        the view returns a polymorphic payload -- the actual serializer is
+        typically attached via ``@extend_schema`` per view.
+      properties:
+        success:
+          type: boolean
+        data:
+          description: Endpoint-specific payload.
+        meta:
+          description: Pagination / counts / free-form metadata.
+        error:
+          allOf:
+          - $ref: '#/components/schemas/ErrorEnvelopeRequest'
+          nullable: true
+      required:
+      - data
+      - success
     VendorRegisterRequest:
       type: object
       description: |-
@@ -5176,32 +5469,25 @@ components:
       - phone
       - trade_license_doc
       - trade_license_number
-    _BusinessAddress:
+    VerifyOTPRequest:
       type: object
       description: |-
-        Bangladesh-style business address -- used as a nested field on
-        ``VendorRegisterSerializer``. JSON callers send a real nested object;
-        multipart callers send a JSON-encoded string in the same field. The
-        JSON-string decode happens in the parent's ``to_internal_value`` so the
-        nested serializer's contract stays simple.
+        Body for ``POST /api/v1/auth/verify-email/``.
+
+        Two fields only: the email (used to look up the user) + the 6-digit
+        numeric code. ``email`` is case-normalised in ``validate_email``.
       properties:
-        street:
+        email:
           type: string
-          maxLength: 255
-        city:
+          format: email
+          minLength: 1
+        code:
           type: string
-          maxLength: 80
-        district:
-          type: string
-          maxLength: 80
-        postal_code:
-          type: string
-          default: ''
-          maxLength: 20
+          minLength: 6
+          maxLength: 6
       required:
-      - city
-      - district
-      - street
+      - code
+      - email
     _BusinessAddressRequest:
       type: object
       description: |-
