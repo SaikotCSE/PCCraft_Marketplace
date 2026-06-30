@@ -17,6 +17,7 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  Eraser,
   Filter,
   KeyRound,
   Loader2,
@@ -104,6 +105,9 @@ const AdminUsersPage = () => {
   const [roleTarget, setRoleTarget] = useState(null);
   const [pendingRole, setPendingRole] = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [hardDeleteTarget, setHardDeleteTarget] = useState(null);
+  const [hardDeleteConfirm, setHardDeleteConfirm] = useState('');
+  const [hardDeleteReason, setHardDeleteReason] = useState('');
 
   // Debounce search → query string.
   const [appliedSearch, setAppliedSearch] = useState('');
@@ -189,6 +193,24 @@ const AdminUsersPage = () => {
     },
     onError: (err) =>
       toast.error(err?.response?.data?.error?.message || 'Delete failed'),
+  });
+
+  const hardDeleteMutation = useMutation({
+    mutationFn: ({ id, reason }) =>
+      adminService.hardDeleteUser(id, { reason }),
+    onSuccess: (snapshot) => {
+      toast.success(
+        `User ${snapshot?.email || ''} permanently deleted. They can re-register with the same email.`,
+      );
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+      setHardDeleteTarget(null);
+      setHardDeleteConfirm('');
+      setHardDeleteReason('');
+    },
+    onError: (err) =>
+      toast.error(
+        err?.response?.data?.error?.message || 'Permanent delete failed',
+      ),
   });
 
   // ---------- derived -------------------------------------------------
@@ -386,6 +408,18 @@ const AdminUsersPage = () => {
                               onClick={() => setDeleteTarget(u)}
                             />
                           )}
+                          {!isAdmin && (
+                            <IconAction
+                              icon={Eraser}
+                              label="Delete permanently"
+                              tone="rose"
+                              onClick={() => {
+                                setHardDeleteTarget(u);
+                                setHardDeleteConfirm('');
+                                setHardDeleteReason('');
+                              }}
+                            />
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -561,6 +595,104 @@ const AdminUsersPage = () => {
         tone="danger"
         loading={deleteMutation.isPending}
       />
+
+      {/*
+        Hard-delete confirmation -- permanent removal from the DB.
+        Requires the admin to type the literal string "DELETE" to enable
+        the confirm button so a misclick can't wipe a real account.
+        Reason is optional but recommended and is recorded in the audit log.
+      */}
+      <Modal
+        open={Boolean(hardDeleteTarget)}
+        onClose={() => {
+          if (hardDeleteMutation.isPending) return;
+          setHardDeleteTarget(null);
+          setHardDeleteConfirm('');
+          setHardDeleteReason('');
+        }}
+        size="sm"
+        title={`Permanently delete ${
+          hardDeleteTarget?.full_name || hardDeleteTarget?.email || 'user'
+        }?`}
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                if (hardDeleteMutation.isPending) return;
+                setHardDeleteTarget(null);
+                setHardDeleteConfirm('');
+                setHardDeleteReason('');
+              }}
+              disabled={hardDeleteMutation.isPending}
+              className="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-text-secondary hover:bg-surface-100 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                hardDeleteMutation.mutate({
+                  id: hardDeleteTarget.id,
+                  reason: hardDeleteReason.trim() || undefined,
+                })
+              }
+              disabled={
+                hardDeleteMutation.isPending ||
+                hardDeleteConfirm.trim() !== 'DELETE'
+              }
+              className="inline-flex items-center justify-center rounded-lg bg-danger px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-danger/90 focus:outline-none focus:ring-2 focus:ring-danger/40 focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {hardDeleteMutation.isPending ? 'Deleting…' : 'Delete forever'}
+            </button>
+          </>
+        }
+      >
+        <div className="flex gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-danger/10 text-danger">
+            <Eraser className="h-5 w-5" aria-hidden="true" />
+          </div>
+          <div className="space-y-3 text-sm text-text-secondary">
+            <p>
+              The account, profile, login attempts, and verification
+              codes will be <strong className="text-text-primary">permanently
+              removed</strong> from the database. The email
+              {hardDeleteTarget?.email ? (
+                <code className="mx-1 rounded bg-surface-100 px-1 py-0.5 text-xs">
+                  {hardDeleteTarget.email}
+                </code>
+              ) : null}
+              will become available for fresh registrations. This cannot
+              be undone.
+            </p>
+            <label className="block">
+              <span className="text-xs font-semibold uppercase tracking-wide text-text-secondary">
+                Reason (optional, recorded in audit log)
+              </span>
+              <input
+                type="text"
+                value={hardDeleteReason}
+                onChange={(e) => setHardDeleteReason(e.target.value)}
+                placeholder="e.g. duplicate account, user-requested erasure"
+                className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm focus:border-accent-400 focus:outline-none focus:ring-1 focus:ring-accent-400"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs font-semibold uppercase tracking-wide text-text-secondary">
+                Type <span className="font-mono text-danger">DELETE</span> to confirm
+              </span>
+              <input
+                type="text"
+                value={hardDeleteConfirm}
+                onChange={(e) => setHardDeleteConfirm(e.target.value)}
+                placeholder="DELETE"
+                autoComplete="off"
+                className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 font-mono text-sm focus:border-accent-400 focus:outline-none focus:ring-1 focus:ring-accent-400"
+              />
+            </label>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

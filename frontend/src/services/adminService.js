@@ -43,6 +43,7 @@ export const adminService = {
   changeUserRole: (id, role) => api.patch(`/admin/users/${id}/change-role/`, { role }).then(unwrap),
   unlockUser: (id) => api.patch(`/admin/users/${id}/unlock/`).then(unwrap),
   deleteUser: (id) => api.delete(`/admin/users/${id}/`).then(unwrap),
+  hardDeleteUser: (id, payload) => api.delete(`/admin/users/${id}/hard-delete/`, { data: payload }).then(unwrap),
 
   // ----- Orders -----
   listOrders: (params) => api.get('/admin/orders/', { params }).then(unwrap),

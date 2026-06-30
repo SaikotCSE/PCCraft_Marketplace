@@ -746,16 +746,27 @@ class _UserAdminActionView(APIView):
             return None  # type: ignore[return-value]
 
 
+def _resolve_or_404(user_id: str) -> tuple[CustomUser | None, Response | None]:
+    """Look up the target user; return ``(None, response)`` on 404."""
+    try:
+        return _get_target_user(user_id), None
+    except UserAdminServiceError as exc:
+        return None, _admin_error_to_response(exc)
+
+
 class AdminUserSuspendView(_UserAdminActionView):
-    """``PATCH /api/v1/admin/users/{id}/suspend/`` body ``{"reason": "..."}``."""
+    """``PATCH /api/v1/admin/users/{id}/suspend/`` body ``{"reason": "..."}``"""
 
     def patch(self, request: Request, user_id: str) -> Response:
+        target, err = _resolve_or_404(user_id)
+        if err is not None:
+            return err
         try:
-            target = _get_target_user(user_id)
-        except UserAdminServiceError as exc:
-            return _admin_error_to_response(exc)
-        try:
-            target = UserAdminService.suspend(actor=request.user, target=target)
+            target = UserAdminService.suspend(
+                actor=request.user,
+                user_id=target.pk,
+                reason=(request.data or {}).get("reason"),
+            )
         except UserAdminServiceError as exc:
             return _admin_error_to_response(exc)
         return api_response(
@@ -765,15 +776,18 @@ class AdminUserSuspendView(_UserAdminActionView):
 
 
 class AdminUserActivateView(_UserAdminActionView):
-    """``PATCH /api/v1/admin/users/{id}/activate/``."""
+    """``PATCH /api/v1/admin/users/{id}/activate/``"""
 
     def patch(self, request: Request, user_id: str) -> Response:
+        target, err = _resolve_or_404(user_id)
+        if err is not None:
+            return err
         try:
-            target = _get_target_user(user_id)
-        except UserAdminServiceError as exc:
-            return _admin_error_to_response(exc)
-        try:
-            target = UserAdminService.activate(actor=request.user, target=target)
+            target = UserAdminService.activate(
+                actor=request.user,
+                user_id=target.pk,
+                reason=(request.data or {}).get("reason"),
+            )
         except UserAdminServiceError as exc:
             return _admin_error_to_response(exc)
         return api_response(
@@ -783,7 +797,7 @@ class AdminUserActivateView(_UserAdminActionView):
 
 
 class AdminUserChangeRoleView(_UserAdminActionView):
-    """``PATCH /api/v1/admin/users/{id}/change-role/`` body ``{"role": "vendor"}``."""
+    """``PATCH /api/v1/admin/users/{id}/change-role/`` body ``{"role": "vendor"}``"""
 
     def patch(self, request: Request, user_id: str) -> Response:
         serializer = AdminUserRoleChangeSerializer(data=request.data)
@@ -793,13 +807,15 @@ class AdminUserChangeRoleView(_UserAdminActionView):
                 "One or more fields failed validation.",
                 fields=serializer.errors,
             )
-        try:
-            target = _get_target_user(user_id)
-        except UserAdminServiceError as exc:
-            return _admin_error_to_response(exc)
+        target, err = _resolve_or_404(user_id)
+        if err is not None:
+            return err
         try:
             target = UserAdminService.change_role(
-                actor=request.user, target=target, new_role=serializer.validated_data["role"],
+                actor=request.user,
+                user_id=target.pk,
+                new_role=serializer.validated_data["role"],
+                reason=(request.data or {}).get("reason"),
             )
         except UserAdminServiceError as exc:
             return _admin_error_to_response(exc)
@@ -810,15 +826,18 @@ class AdminUserChangeRoleView(_UserAdminActionView):
 
 
 class AdminUserUnlockView(_UserAdminActionView):
-    """``PATCH /api/v1/admin/users/{id}/unlock/`` -- clears lockout state."""
+    """``PATCH /api/v1/admin/users/{id}/unlock/`` -- clears lockout state"""
 
     def patch(self, request: Request, user_id: str) -> Response:
+        target, err = _resolve_or_404(user_id)
+        if err is not None:
+            return err
         try:
-            target = _get_target_user(user_id)
-        except UserAdminServiceError as exc:
-            return _admin_error_to_response(exc)
-        try:
-            target = UserAdminService.unlock(actor=request.user, target=target)
+            target = UserAdminService.unlock(
+                actor=request.user,
+                user_id=target.pk,
+                reason=(request.data or {}).get("reason"),
+            )
         except UserAdminServiceError as exc:
             return _admin_error_to_response(exc)
         return api_response(
@@ -828,20 +847,51 @@ class AdminUserUnlockView(_UserAdminActionView):
 
 
 class AdminUserDeleteView(_UserAdminActionView):
-    """``DELETE /api/v1/admin/users/{id}/`` -- soft-delete only."""
+    """``DELETE /api/v1/admin/users/{id}/`` -- soft-delete only"""
 
     def delete(self, request: Request, user_id: str) -> Response:
+        target, err = _resolve_or_404(user_id)
+        if err is not None:
+            return err
         try:
-            target = _get_target_user(user_id)
-        except UserAdminServiceError as exc:
-            return _admin_error_to_response(exc)
-        try:
-            target = UserAdminService.soft_delete(actor=request.user, target=target)
+            target = UserAdminService.soft_delete(
+                actor=request.user,
+                user_id=target.pk,
+                reason=(request.data or {}).get("reason"),
+            )
         except UserAdminServiceError as exc:
             return _admin_error_to_response(exc)
         return api_response(
             data=AdminUserSerializer(target).data,
             message="User deactivated.",
+        )
+
+
+class AdminUserHardDeleteView(_UserAdminActionView):
+    """``DELETE /api/v1/admin/users/{id}/hard-delete/`` -- permanent removal.
+
+    Distinct from :class:`AdminUserDeleteView` -- the row is removed
+    from the database and the email becomes available for fresh
+    registrations. Body (optional): ``{"reason": "..."}`` recorded in
+    the audit log. Frontend is expected to confirm via a typed-string
+    dialog before calling this endpoint.
+    """
+
+    def delete(self, request: Request, user_id: str) -> Response:
+        target, err = _resolve_or_404(user_id)
+        if err is not None:
+            return err
+        try:
+            snapshot = UserAdminService.hard_delete(
+                actor=request.user,
+                user_id=target.pk,
+                reason=(request.data or {}).get("reason"),
+            )
+        except UserAdminServiceError as exc:
+            return _admin_error_to_response(exc)
+        return api_response(
+            data=snapshot,
+            message="User permanently deleted.",
         )
 
 

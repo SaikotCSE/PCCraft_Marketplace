@@ -12,6 +12,7 @@ from apps.accounts.views import (
     AdminUserActivateView,
     AdminUserChangeRoleView,
     AdminUserDeleteView,
+    AdminUserHardDeleteView,
     AdminUserListView,
     AdminUserSuspendView,
     AdminUserUnlockView,
@@ -40,6 +41,13 @@ urlpatterns: list = [
         "<uuid:user_id>/unlock/",
         AdminUserUnlockView.as_view(),
         name="unlock",
+    ),
+    # Permanent removal -- listed before the UUID-only catch-all so
+    # the trailing-slash variant can't ever shadow it.
+    path(
+        "<uuid:user_id>/hard-delete/",
+        AdminUserHardDeleteView.as_view(),
+        name="hard-delete",
     ),
     path(
         "<uuid:user_id>/",

@@ -906,6 +906,54 @@ class UserAdminService:
         return user
 
     @staticmethod
+    @transaction.atomic
+    def hard_delete(*, actor, user_id, reason: str | None = None) -> dict:
+        """Permanently remove a user account from the database.
+
+        Distinct from :meth:`soft_delete` -- the row is removed via
+        ``Model.delete()`` and *cannot* be recovered. Related
+        ``CustomerProfile`` / ``VendorProfile`` rows (CASCADE) and
+        ``LoginAttempt`` / ``EmailVerificationCode`` rows also go
+        away; ``SearchLog`` and ``approved_by`` references are
+        ``SET_NULL`` and survive as ``NULL`` pointers. After this
+        call the email becomes available for fresh registrations.
+
+        We snapshot the email + id before ``delete()`` so the audit
+        log still has something meaningful to record (the row no
+        longer exists after the call).
+
+        Args:
+            actor: The :class:`CustomUser` performing the action
+                (must be an admin; superuser required to act on
+                another admin).
+            user_id: Primary key of the target user.
+            reason: Optional free-text justification recorded in the
+                audit log.
+
+        Returns:
+            ``{"id": "...", "email": "..."}`` -- the snapshot of
+            what was deleted, for the response body.
+
+        Raises:
+            UserAdminServiceError: If the user is not found, the
+                actor is the target (self-action), or the actor lacks
+                privilege to manage another admin.
+        """
+        user = UserAdminService.get_user(user_id)
+        UserAdminService._ensure_can_manage(actor, user)
+        snapshot = {
+            "id": str(user.pk),
+            "email": user.email,
+            "role": user.role,
+        }
+        user.delete()
+        UserAdminService._audit(
+            actor, "user.hard_delete", target=None,
+            reason=reason, metadata=snapshot,
+        )
+        return snapshot
+
+    @staticmethod
     def _audit(actor, action: str, target, reason: str | None = None, metadata=None):
         """Best-effort audit log write.
 
