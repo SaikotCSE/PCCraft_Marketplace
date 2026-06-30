@@ -45,7 +45,6 @@ def _image(name: str = "r.png") -> SimpleUploadedFile:
 def _make_user(email: str = "u1@example.com", *, role: str = UserRole.CUSTOMER) -> User:
     return User.objects.create_user(
         email=email,
-        username=email.split("@")[0],
         password="password123",
         full_name="User " + email.split("@")[0],
         role=role,
@@ -55,7 +54,6 @@ def _make_user(email: str = "u1@example.com", *, role: str = UserRole.CUSTOMER) 
 def _make_vendor_user(email: str = "v1@example.com") -> User:
     user = User.objects.create_user(
         email=email,
-        username=email.split("@")[0],
         password="password123",
         full_name="Vendor One",
         role=UserRole.VENDOR,
@@ -66,7 +64,6 @@ def _make_vendor_user(email: str = "v1@example.com") -> User:
         store_slug="store-one",
         business_type=BusinessType.SOLE_PROP,
         status=VendorStatus.APPROVED,
-        is_approved=True,
     )
     return user
 
