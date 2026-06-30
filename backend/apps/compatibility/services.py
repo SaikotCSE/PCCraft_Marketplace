@@ -438,6 +438,24 @@ class CompatibilityService:
         product_b: Product | None,
         slot_map: dict[str, Product | None],
     ) -> CompatibilityResult:
+        """Spec §2.10 ``MATCH`` rule.
+
+        Both attribute values must exist and compare equal as
+        case-insensitive strings. A missing value on either side is
+        treated as not-yet-known → rule is ``UNKNOWN``.
+
+        Args:
+            rule: Rule definition (used for messaging).
+            attr_a: Attribute attached to ``slot_a``.
+            attr_b: Attribute attached to ``slot_b``.
+            product_a: Product filling ``slot_a`` (may be ``None``).
+            product_b: Product filling ``slot_b`` (may be ``None``).
+            slot_map: Full build context (unused by this rule).
+
+        Returns:
+            ``CompatibilityResult`` with ``OK``, ``FAIL``, or
+            ``UNKNOWN`` status.
+        """
         val_a = _spec_value(product_a, attr_a)
         val_b = _spec_value(product_b, attr_b)
         passed = (
@@ -472,6 +490,26 @@ class CompatibilityService:
         product_b: Product | None,
         slot_map: dict[str, Product | None],
     ) -> CompatibilityResult:
+        """Spec §2.10 ``MEMBER_OF`` rule.
+
+        One side's attribute holds the superset options (a JSON array),
+        the other side's attribute holds the chosen value. The
+        evaluator is agnostic about which slot is ``a`` vs ``b`` —
+        whichever attribute has ``AttributeDataType.JSON_ARRAY``
+        provides the superset.
+
+        Args:
+            rule: Rule definition (used for messaging).
+            attr_a: Attribute attached to ``slot_a``.
+            attr_b: Attribute attached to ``slot_b``.
+            product_a: Product filling ``slot_a`` (may be ``None``).
+            product_b: Product filling ``slot_b`` (may be ``None``).
+            slot_map: Full build context (unused by this rule).
+
+        Returns:
+            ``CompatibilityResult`` with ``OK``, ``FAIL``, or
+            ``UNKNOWN`` status.
+        """
         # The superset attribute carries ``AttributeDataType.JSON_ARRAY``;
         # whichever side has that type provides the options, and the
         # other side provides the chosen value. This is robust to the

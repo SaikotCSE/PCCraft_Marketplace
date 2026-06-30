@@ -119,6 +119,15 @@ class CartService:
 
     @staticmethod
     def remove_item(cart_item: CartItem) -> None:
+        """Delete a single cart line item.
+
+        The persisted row is removed via the model ``delete()`` so
+        any cascading FKs (none today, but reserved for future
+        gift-wrap / add-on tables) fire as well.
+
+        Args:
+            cart_item: The :class:`CartItem` to remove from the cart.
+        """
         cart_item.delete()
 
     @staticmethod

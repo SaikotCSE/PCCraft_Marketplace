@@ -71,6 +71,26 @@ class CategoryService:
     @classmethod
     @transaction.atomic
     def create(cls, data: dict[str, Any]) -> Category:
+        """Create a new :class:`Category`.
+
+        Resolves ``parent`` (string pk or model instance) and auto-
+        generates the slug from ``name`` when not supplied. Refuses
+        creation if the resulting slug is already taken.
+
+        Args:
+            data: Validated category fields. May include ``parent``
+                (string pk or :class:`Category` instance) and
+                ``slug``; both are popped from the mapping before
+                being passed to the model constructor.
+
+        Returns:
+            The newly created :class:`Category` instance.
+
+        Raises:
+            CategoryServiceError: If the supplied ``parent`` does not
+                exist (``code='invalid_parent'``), or the slug is
+                already in use (``code='duplicate_slug'``).
+        """
         parent = data.pop("parent", None)
         if isinstance(parent, str) and parent:
             try:
@@ -98,6 +118,30 @@ class CategoryService:
     @classmethod
     @transaction.atomic
     def update(cls, category: Category, data: dict[str, Any]) -> Category:
+        """Update an existing :class:`Category`.
+
+        Supports changing the ``parent`` (with self-parent guard and
+        non-existent parent guard), the ``slug`` (with duplicate
+        check), and editable attributes: ``name``, ``description``,
+        ``display_order``, ``spec_template``, ``is_active``,
+        ``icon``, and ``image``.
+
+        Args:
+            category: The :class:`Category` instance to update.
+            data: Mapping of field names to new values. Unknown
+                fields are ignored. ``parent`` may be a string pk,
+                a :class:`Category` instance, or ``None`` to detach.
+
+        Returns:
+            The updated :class:`Category` instance.
+
+        Raises:
+            CategoryServiceError: If ``parent`` does not exist
+                (``code='invalid_parent'``), the category would
+                become its own parent (``code='invalid_parent'``),
+                or the new ``slug`` is already in use by another
+                category (``code='duplicate_slug'``).
+        """
         if "parent" in data:
             parent = data.pop("parent")
             if isinstance(parent, str) and parent:
@@ -199,6 +243,30 @@ class CategoryAdminService:
 
     @staticmethod
     def list_categories(*, search: str = "", is_active: str = "", parent: str = "", ordering: str = "display_order"):
+        """Return a queryset of :class:`Category` with optional filters.
+
+        Filters by ``name__icontains`` (case-insensitive) when
+        ``search`` is provided, by ``is_active`` when ``is_active``
+        is one of ``"true"|"1"|"yes"`` or ``"false"|"0"|"no"``, and
+        by the parent category's slug when ``parent`` is given.
+        ``ordering`` is restricted to an allow-list; anything else
+        falls back to ``("display_order", "name")``.
+
+        Args:
+            search: Substring to match against ``name`` (whitespace
+                trimmed).
+            is_active: Tri-state string filter. ``"true"``, ``"1"``,
+                ``"yes"`` filter to active; ``"false"``, ``"0"``,
+                ``"no"`` filter to inactive; any other value is
+                ignored.
+            parent: Optional parent category slug to filter by.
+            ordering: One of the allowed orderings: ``display_order``,
+                ``-display_order``, ``name``, ``-name``,
+                ``created_at``, ``-created_at``.
+
+        Returns:
+            A queryset of :class:`Category` rows.
+        """
         qs = Category.all_objects.all()
         if search:
             qs = qs.filter(name__icontains=search.strip())
@@ -218,6 +286,18 @@ class CategoryAdminService:
 
     @staticmethod
     def get_category_by_slug(slug: str) -> Category:
+        """Fetch a single :class:`Category` by its slug.
+
+        Args:
+            slug: The unique slug of the category.
+
+        Returns:
+            The matching :class:`Category` instance.
+
+        Raises:
+            CategoryAdminServiceError: If no category with ``slug``
+                exists (``code='not_found'``, ``http_status=404``).
+        """
         try:
             return Category.all_objects.get(slug=slug)
         except Category.DoesNotExist as exc:
@@ -274,6 +354,31 @@ class CategoryAdminService:
     @staticmethod
     @transaction.atomic
     def create(*, actor, data: dict, request=None) -> Category:
+        """Create a :class:`Category` and audit the action.
+
+        Enforces a single-level nesting: a category whose
+        ``parent`` is itself a child of another category is
+        rejected with ``code='too_deep'``.
+
+        Args:
+            actor: The :class:`CustomUser` performing the action.
+            data: Validated category fields. Requires ``name``;
+                ``slug`` is optional. Other supported keys:
+                ``description``, ``display_order``, ``is_active``,
+                ``spec_template``, ``parent``, ``icon``, ``image``.
+            request: Optional request object forwarded to the audit
+                logger for IP/UA capture.
+
+        Returns:
+            The newly created :class:`Category` instance.
+
+        Raises:
+            CategoryAdminServiceError: If ``name`` is missing/blank
+                (``code='validation_error'``), the supplied ``slug``
+                is already in use (``code='slug_taken'``), or the
+                new category would exceed the one-level nesting
+                limit (``code='too_deep'``).
+        """
         name = (data.get("name") or "").strip()
         if not name:
             raise CategoryAdminServiceError(
@@ -316,6 +421,31 @@ class CategoryAdminService:
     @staticmethod
     @transaction.atomic
     def update(*, actor, category: Category, data: dict, request=None) -> Category:
+        """Update a :class:`Category` and audit the action.
+
+        Editable fields: ``name``, ``slug``, ``description``,
+        ``display_order``, ``is_active``, ``spec_template``,
+        ``parent``, ``icon``, ``image``. Enforces single-level
+        nesting on the new parent and refuses self-parenting.
+
+        Args:
+            actor: The :class:`CustomUser` performing the action.
+            category: The :class:`Category` instance to update.
+            data: Mapping of field names to new values.
+            request: Optional request object forwarded to the audit
+                logger.
+
+        Returns:
+            The updated :class:`Category` instance.
+
+        Raises:
+            CategoryAdminServiceError: If the new ``slug`` is
+                already in use by another category
+                (``code='slug_taken'``), the new parent is the
+                category itself (``code='self_parent'``), or the
+                nesting would exceed one level
+                (``code='too_deep'``).
+        """
         editable = {
             "name", "slug", "description", "display_order",
             "is_active", "spec_template", "parent", "icon", "image",
@@ -361,6 +491,22 @@ class CategoryAdminService:
     @staticmethod
     @transaction.atomic
     def soft_delete(*, actor, category: Category, request=None) -> None:
+        """Soft-delete a :class:`Category` and audit the action.
+
+        Refuses to delete a category that still has any children;
+        the admin must re-parent or remove them first.
+
+        Args:
+            actor: The :class:`CustomUser` performing the action.
+            category: The :class:`Category` instance to delete.
+            request: Optional request object forwarded to the audit
+                logger.
+
+        Raises:
+            CategoryAdminServiceError: If the category still has
+                children (``code='has_children'``,
+                ``http_status=400``).
+        """
         if Category.all_objects.filter(parent=category).exists():
             raise CategoryAdminServiceError(
                 "has_children",
@@ -373,6 +519,20 @@ class CategoryAdminService:
     @staticmethod
     @transaction.atomic
     def restore(*, actor, category: Category, request=None) -> Category:
+        """Restore a previously soft-deleted :class:`Category`.
+
+        Re-activates the row and audits the action. No-ops when
+        the category is already active.
+
+        Args:
+            actor: The :class:`CustomUser` performing the action.
+            category: The :class:`Category` instance to restore.
+            request: Optional request object forwarded to the audit
+                logger.
+
+        Returns:
+            The restored :class:`Category` instance.
+        """
         if category.is_active:
             return category
         category.is_active = True
@@ -382,6 +542,14 @@ class CategoryAdminService:
 
     @staticmethod
     def _audit(actor, action: str, target, *, request=None):
+        """Best-effort audit log write for category actions.
+
+        Args:
+            actor: Admin user performing the action (may be ``None``).
+            action: Stable action code, e.g. ``"category.create"``.
+            target: Category instance being acted upon.
+            request: Optional Django request for IP / UA capture.
+        """
         try:
             from apps.common.audit import log_action  # type: ignore
         except Exception:  # pragma: no cover

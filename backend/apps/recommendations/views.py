@@ -10,7 +10,8 @@ Five GET endpoints + one POST action (on the products router)::
     POST /api/v1/products/<slug>/track-view/         (auth optional)
 
 Every endpoint returns ``{ "count": int, "results": [serialized ...] }``
-so the React carousel can hydrate its state from a single fetch.
+inside the standard API envelope so the React carousel can hydrate its
+state from a single fetch.
 """
 from __future__ import annotations
 
@@ -21,9 +22,9 @@ from django.shortcuts import get_object_or_404
 from rest_framework import permissions, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.request import Request
-from rest_framework.response import Response
 
 from apps.categories.models import Category
+from apps.common.response import api_response
 from apps.products.models import Product, ProductStatus
 from apps.products.serializers import ProductListSerializer
 from apps.recommendations.services import ProductViewService
@@ -67,6 +68,11 @@ def _hydrate(product_ids: Iterable[Any], *, slug_map: dict[str, Any] | None = No
 
 
 def _limit_from_request(request: Request, default: int = DEFAULT_LIMIT) -> int:
+    """Clamp the ``?limit=`` query param to ``[1, MAX_LIMIT]``.
+
+    Invalid values silently fall back to ``default`` so a malformed
+    client never breaks the carousel render.
+    """
     raw = request.query_params.get("limit")
     try:
         n = int(raw) if raw is not None else default
@@ -80,7 +86,7 @@ def _limit_from_request(request: Request, default: int = DEFAULT_LIMIT) -> int:
 # ---------------------------------------------------------------------------
 @api_view(["GET"])
 @permission_classes([permissions.AllowAny])
-def trending(request: Request) -> Response:
+def trending(request: Request):
     """Global trending feed (category filter optional via ?category=<slug-or-id>).
 
     The frontend only knows the category slug (from ``/categories/:slug``),
@@ -106,7 +112,7 @@ def trending(request: Request) -> Response:
         context={"category_id": category_id},
         limit=limit,
     )
-    return Response({
+    return api_response(data={
         "count": len(ids),
         "source": "trending",
         "results": _hydrate(ids),
@@ -118,14 +124,14 @@ def trending(request: Request) -> Response:
 # ---------------------------------------------------------------------------
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
-def personalized(request: Request) -> Response:
+def personalized(request: Request):
     """The logged-in viewer's personalized feed."""
     limit = _limit_from_request(request)
     ids = PersonalizedStrategy().get_recommendations(
         context={"user_id": request.user.id},
         limit=limit,
     )
-    return Response({
+    return api_response(data={
         "count": len(ids),
         "source": "personalized",
         "results": _hydrate(ids),
@@ -137,7 +143,7 @@ def personalized(request: Request) -> Response:
 # ---------------------------------------------------------------------------
 @api_view(["GET"])
 @permission_classes([permissions.AllowAny])
-def recently_viewed(request: Request) -> Response:
+def recently_viewed(request: Request):
     """The viewer's most-recent products (user or anonymous session)."""
     limit = _limit_from_request(request)
     context: dict[str, Any] = {}
@@ -149,12 +155,16 @@ def recently_viewed(request: Request) -> Response:
             request.headers.get("X-Session-Key", "") or ""
         )
     if not context:
-        return Response({"count": 0, "source": "recently-viewed", "results": []})
+        return api_response(data={
+            "count": 0,
+            "source": "recently-viewed",
+            "results": [],
+        })
     ids = RecentlyViewedStrategy().get_recommendations(
         context=context,
         limit=limit,
     )
-    return Response({
+    return api_response(data={
         "count": len(ids),
         "source": "recently-viewed",
         "results": _hydrate(ids),
@@ -166,7 +176,8 @@ def recently_viewed(request: Request) -> Response:
 # ---------------------------------------------------------------------------
 @api_view(["GET"])
 @permission_classes([permissions.AllowAny])
-def similar_products(request: Request, slug: str) -> Response:
+def similar_products(request: Request, slug: str):
+    """Content-based recommendations for the given product slug."""
     limit = _limit_from_request(request)
     product = get_object_or_404(
         Product, slug=slug, is_active=True, status=ProductStatus.ACTIVE,
@@ -175,7 +186,7 @@ def similar_products(request: Request, slug: str) -> Response:
         context={"product_id": product.id},
         limit=limit,
     )
-    return Response({
+    return api_response(data={
         "count": len(ids),
         "source": "similar",
         "results": _hydrate(ids),
@@ -187,7 +198,8 @@ def similar_products(request: Request, slug: str) -> Response:
 # ---------------------------------------------------------------------------
 @api_view(["GET"])
 @permission_classes([permissions.AllowAny])
-def frequently_bought_together(request: Request, slug: str) -> Response:
+def frequently_bought_together(request: Request, slug: str):
+    """Co-occurrence recommendations for the given product slug."""
     limit = _limit_from_request(request)
     product = get_object_or_404(
         Product, slug=slug, is_active=True, status=ProductStatus.ACTIVE,
@@ -196,7 +208,7 @@ def frequently_bought_together(request: Request, slug: str) -> Response:
         context={"product_id": product.id},
         limit=limit,
     )
-    return Response({
+    return api_response(data={
         "count": len(ids),
         "source": "frequently-bought-together",
         "results": _hydrate(ids),
@@ -214,8 +226,12 @@ def track_view_for_product(
     slug: str,
     session_key: str = "",
     ip_address: str = "",
-) -> Response:
-    """Persist a ProductView for the given product slug."""
+):
+    """Persist a ProductView for the given product slug.
+
+    Returns ``202 Accepted`` since this is fire-and-forget telemetry --
+    the client does not need to wait for a payload beyond an ack.
+    """
     product = get_object_or_404(
         Product, slug=slug, is_active=True, status=ProductStatus.ACTIVE,
     )
@@ -227,8 +243,8 @@ def track_view_for_product(
         session_key=session_key,
         ip_address=ip_address,
     )
-    return Response(
-        {
+    return api_response(
+        data={
             "tracked": True,
             "id": str(row.id),
             "product": str(row.product_id),

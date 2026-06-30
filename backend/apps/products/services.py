@@ -65,6 +65,35 @@ class ProductService:
         data: dict[str, Any],
         images: Iterable | None = None,
     ) -> Product:
+        """Create a new product owned by ``vendor`` and seed its price history.
+
+        Validates that any ``specs`` keys are declared in
+        ``category.spec_template`` (spec §2.7) and that the SKU is
+        unique per active vendor product. If ``images`` is provided,
+        the first uploaded image is promoted to ``is_primary``.
+
+        Args:
+            vendor: Vendor that owns the new product.
+            category: Category the product belongs to; supplies
+                ``spec_template`` for spec validation.
+            brand: Brand attached to the product.
+            data: Mapping of product fields, including ``sku``,
+                ``name``, ``base_price`` and any other editable
+                columns. ``images`` is consumed here and not stored
+                on the product itself.
+            images: Optional iterable of image uploads to attach.
+                The first entry becomes the primary image.
+
+        Returns:
+            The freshly persisted :class:`Product`.
+
+        Raises:
+            ProductServiceError: With code ``invalid_specs`` (HTTP
+                400) if ``data["specs"]`` contains keys absent from
+                the category's template, or ``duplicate_sku`` (HTTP
+                400) if the SKU is already used by another active
+                product of the same vendor.
+        """
         specs = data.get("specs") or {}
         _validate_specs_against_template(category, specs)
 
@@ -104,6 +133,33 @@ class ProductService:
         brand: Brand | None = None,
         data: dict[str, Any],
     ) -> Product:
+        """Apply a partial update to ``product`` from a ``data`` mapping.
+
+        Only keys listed in the editable-field whitelist are copied
+        across. If ``category`` is supplied, ``specs`` are revalidated
+        against the new category's ``spec_template``. When
+        ``base_price`` or ``discounted_price`` change, a new
+        :class:`PriceHistory` row is appended so the price-change
+        timeline is auditable.
+
+        Args:
+            product: The product to mutate.
+            category: Optional replacement category. When supplied,
+                triggers spec validation against the new template.
+            brand: Optional replacement brand.
+            data: Mapping of editable fields. Unrecognised keys are
+                silently ignored.
+
+        Returns:
+            The persisted :class:`Product` with updates applied.
+
+        Raises:
+            ProductServiceError: ``invalid_specs`` (HTTP 400) if the
+                new specs contain keys not declared by the category,
+                or ``duplicate_sku`` (HTTP 400) if the new SKU
+                collides with another active product of the same
+                vendor.
+        """
         if category is not None:
             product.category = category
             _validate_specs_against_template(category, data.get("specs") or product.specs)
@@ -157,6 +213,15 @@ class ProductService:
 
     @classmethod
     def soft_delete(cls, product: Product) -> None:
+        """Soft-delete ``product`` by delegating to the model hook.
+
+        Vendor-initiated soft-delete uses this entry point; admin
+        moderation should go through :class:`AdminProductService`
+        instead so the audit log is populated.
+
+        Args:
+            product: The product to deactivate. Mutated in place.
+        """
         product.soft_delete()
 
     # ------------------------------------------------------------------
@@ -164,6 +229,24 @@ class ProductService:
     # ------------------------------------------------------------------
     @classmethod
     def _add_images(cls, product: Product, images: Iterable) -> list[ProductImage]:
+        """Attach additional images to an existing product.
+
+        Enforces the per-product image limit and persists each image
+        with a stable display order. The first uploaded image is
+        automatically marked primary unless one already exists.
+
+        Args:
+            product: Target ``Product`` instance (must be saved).
+            images: Iterable of upload-file objects (``UploadedFile``
+                or anything ``ProductImage.objects.create`` accepts).
+
+        Returns:
+            List of newly created ``ProductImage`` rows.
+
+        Raises:
+            ProductServiceError: ``"too_many_images"`` when the
+                resulting count would exceed ``MAX_PRODUCT_IMAGES``.
+        """
         existing = product.images.filter(is_active=True).count()
         if existing + len(list(images)) > MAX_PRODUCT_IMAGES:
             raise ProductServiceError(
@@ -184,11 +267,43 @@ class ProductService:
     @classmethod
     @transaction.atomic
     def add_images(cls, product: Product, images: Iterable) -> list[ProductImage]:
+        """Attach new images to ``product`` while enforcing the per-product cap.
+
+        Thin transactional wrapper around :meth:`_add_images` used
+        by vendor-facing views.
+
+        Args:
+            product: Product that will own the new images.
+            images: Iterable of image file uploads.
+
+        Returns:
+            The list of newly created :class:`ProductImage` rows.
+
+        Raises:
+            ProductServiceError: ``too_many_images`` (HTTP 400) if
+                the cap defined by :data:`MAX_PRODUCT_IMAGES` would
+                be exceeded.
+        """
         return cls._add_images(product, images)
 
     @classmethod
     @transaction.atomic
     def delete_image(cls, product: Product, image_id: str) -> None:
+        """Soft-delete a single image and promote a new primary if needed.
+
+        If the deleted image was the primary, the next image by
+        ``display_order`` is promoted so the storefront always has a
+        hero image.
+
+        Args:
+            product: Product that owns the image.
+            image_id: Primary key of the :class:`ProductImage` to
+                remove.
+
+        Raises:
+            ProductServiceError: ``not_found`` (HTTP 404) when no
+                image with ``image_id`` exists on the product.
+        """
         try:
             image = product.images.get(pk=image_id)
         except ProductImage.DoesNotExist:
@@ -204,6 +319,22 @@ class ProductService:
     @classmethod
     @transaction.atomic
     def reorder_images(cls, product: Product, ordered_ids: list[str]) -> None:
+        """Rewrite the ``display_order`` of all active images for ``product``.
+
+        ``ordered_ids`` must list every active image id exactly
+        once; partial reorderings are rejected so we never end up
+        with two images sharing a ``display_order`` or with rows
+        that disappear from the storefront.
+
+        Args:
+            product: Product whose images are being reordered.
+            ordered_ids: Image ids in the desired order.
+
+        Raises:
+            ProductServiceError: ``invalid_ids`` (HTTP 400) when the
+                payload does not exactly match the set of active
+                image ids.
+        """
         ids = [str(i) for i in ordered_ids]
         images = {str(img.pk): img for img in product.images.filter(is_active=True)}
         if set(ids) != set(images.keys()):
@@ -220,6 +351,19 @@ class ProductService:
     @classmethod
     @transaction.atomic
     def set_primary_image(cls, product: Product, image_id: str) -> None:
+        """Mark ``image_id`` as the primary image for ``product``.
+
+        Any other image currently flagged as primary is demoted in
+        the same transaction.
+
+        Args:
+            product: Product that owns the images.
+            image_id: Primary key of the image to promote.
+
+        Raises:
+            ProductServiceError: ``not_found`` (HTTP 404) if no
+                matching image exists on the product.
+        """
         try:
             target = product.images.get(pk=image_id)
         except ProductImage.DoesNotExist:
@@ -236,6 +380,24 @@ class ProductService:
     # ------------------------------------------------------------------
     @classmethod
     def transition_status(cls, product: Product, new_status: str) -> Product:
+        """Set ``product.status`` to a valid :class:`ProductStatus` value.
+
+        A simple state transition used by vendor flows; admin
+        moderation should use :meth:`AdminProductService.moderate_status`
+        so the action is audited.
+
+        Args:
+            product: Product whose status will change.
+            new_status: Target status. Must be one of
+                :attr:`ProductStatus.values`.
+
+        Returns:
+            The updated :class:`Product`.
+
+        Raises:
+            ProductServiceError: ``invalid_status`` (HTTP 400) when
+                ``new_status`` is not a recognised choice.
+        """
         if new_status not in ProductStatus.values:
             raise ProductServiceError(
                 "invalid_status",
@@ -337,6 +499,22 @@ class AdminProductService:
 
     @staticmethod
     def get_product_by_slug(slug: str):
+        """Fetch a product (any status, any vendor) by slug.
+
+        Uses ``Product.all_objects`` so admins can inspect drafts and
+        soft-deleted rows by slug.
+
+        Args:
+            slug: URL slug of the product.
+
+        Returns:
+            The matching :class:`Product` with ``vendor``, ``brand``
+            and ``category`` eagerly loaded.
+
+        Raises:
+            AdminProductServiceError: ``not_found`` (HTTP 404) when
+                no product matches the slug.
+        """
         try:
             return Product.all_objects.select_related(
                 "vendor", "brand", "category"

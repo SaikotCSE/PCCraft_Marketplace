@@ -29,6 +29,17 @@ class WishlistService:
     @staticmethod
     @transaction.atomic
     def get_or_create_wishlist(user) -> Wishlist:
+        """Return the singleton wishlist for ``user``, creating it on demand.
+
+        Uses ``select_for_update`` so concurrent first-touch requests
+        can't create duplicate wishlists for the same user.
+
+        Args:
+            user: The user whose wishlist is fetched or created.
+
+        Returns:
+            The :class:`Wishlist` for ``user``.
+        """
         wishlist, _created = Wishlist.objects.select_for_update().get_or_create(user=user)
         return wishlist
 
@@ -51,6 +62,13 @@ class WishlistService:
 
     @staticmethod
     def remove_item(wishlist_item: WishlistItem) -> None:
+        """Delete a single wishlist line item.
+
+        Args:
+            wishlist_item: The :class:`WishlistItem` to remove.
+                Persisted state of the row is destroyed; the model
+                instance itself is not reused.
+        """
         wishlist_item.delete()
 
     @staticmethod

@@ -26,6 +26,25 @@ class BrandService:
     @classmethod
     @transaction.atomic
     def create(cls, data: dict[str, Any]) -> Brand:
+        """Create a new :class:`Brand`.
+
+        Derives the slug from ``data['name']`` if no explicit ``slug``
+        is supplied, and refuses creation if the resulting slug is
+        already taken.
+
+        Args:
+            data: Validated brand fields. May include an optional
+                ``slug``; otherwise it is auto-generated from
+                ``name``. The ``slug`` key is popped before being
+                passed to the model constructor.
+
+        Returns:
+            The newly created :class:`Brand` instance.
+
+        Raises:
+            BrandServiceError: If the slug is already in use
+                (``code='duplicate_slug'``).
+        """
         slug = data.pop("slug", None) or slugify(data.get("name", ""))
         if Brand.objects.filter(slug=slug).exists():
             raise BrandServiceError(
@@ -40,6 +59,26 @@ class BrandService:
     @classmethod
     @transaction.atomic
     def update(cls, brand: Brand, data: dict[str, Any]) -> Brand:
+        """Update an existing :class:`Brand` with the supplied fields.
+
+        Supports changing the ``slug`` (with duplicate check) and a
+        fixed list of editable attributes: ``name``, ``description``,
+        ``website``, ``is_active``, ``is_featured``, ``display_order``,
+        ``logo``, and ``banner``.
+
+        Args:
+            brand: The :class:`Brand` instance to update.
+            data: Mapping of field names to new values. Unknown fields
+                are ignored.
+
+        Returns:
+            The updated :class:`Brand` instance.
+
+        Raises:
+            BrandServiceError: If a new ``slug`` is provided and
+                another brand already uses it
+                (``code='duplicate_slug'``).
+        """
         if "slug" in data and data["slug"]:
             new_slug = data["slug"]
             if (
@@ -123,6 +162,29 @@ class BrandAdminService:
 
     @staticmethod
     def list_brands(*, search: str = "", is_active: str = "", ordering: str = "display_order"):
+        """Return a queryset of :class:`Brand` with optional filters.
+
+        Filters by ``name__icontains`` (case-insensitive) when
+        ``search`` is provided, and by ``is_active`` when
+        ``is_active`` is one of ``"true"|"1"|"yes"`` or
+        ``"false"|"0"|"no"``. ``ordering`` is restricted to an
+        allow-list; anything else falls back to
+        ``("display_order", "name")``.
+
+        Args:
+            search: Substring to match against ``name`` (whitespace
+                trimmed).
+            is_active: Tri-state string filter. ``"true"``, ``"1"``,
+                ``"yes"`` filter to active; ``"false"``, ``"0"``,
+                ``"no"`` filter to inactive; any other value is
+                ignored.
+            ordering: One of the allowed orderings:
+                ``display_order``, ``-display_order``, ``name``,
+                ``-name``, ``created_at``, ``-created_at``.
+
+        Returns:
+            A queryset of :class:`Brand` rows.
+        """
         qs = Brand.all_objects.all()
         if search:
             qs = qs.filter(name__icontains=search.strip())
@@ -140,6 +202,18 @@ class BrandAdminService:
 
     @staticmethod
     def get_brand_by_slug(slug: str) -> Brand:
+        """Fetch a single :class:`Brand` by its slug.
+
+        Args:
+            slug: The unique slug of the brand.
+
+        Returns:
+            The matching :class:`Brand` instance.
+
+        Raises:
+            BrandAdminServiceError: If no brand with ``slug`` exists
+                (``code='not_found'``, ``http_status=404``).
+        """
         try:
             return Brand.all_objects.get(slug=slug)
         except Brand.DoesNotExist as exc:
@@ -153,6 +227,25 @@ class BrandAdminService:
     @staticmethod
     @transaction.atomic
     def create(*, actor, data: dict, request=None) -> Brand:
+        """Create a :class:`Brand` and audit the action.
+
+        Args:
+            actor: The :class:`CustomUser` performing the action.
+            data: Validated brand fields. Requires ``name``; ``slug``
+                is optional. Other supported keys: ``description``,
+                ``website``, ``is_featured``, ``is_active``,
+                ``display_order``, ``logo``, ``banner``.
+            request: Optional request object forwarded to the audit
+                logger for IP/UA capture.
+
+        Returns:
+            The newly created :class:`Brand` instance.
+
+        Raises:
+            BrandAdminServiceError: If ``name`` is missing/blank
+                (``code='validation_error'``) or the supplied ``slug``
+                is already in use (``code='slug_taken'``).
+        """
         name = (data.get("name") or "").strip()
         if not name:
             raise BrandAdminServiceError(
@@ -187,6 +280,27 @@ class BrandAdminService:
     @staticmethod
     @transaction.atomic
     def update(*, actor, brand: Brand, data: dict, request=None) -> Brand:
+        """Update a :class:`Brand` and audit the action.
+
+        Editable fields: ``name``, ``slug``, ``description``,
+        ``website``, ``is_featured``, ``is_active``, ``display_order``,
+        ``logo``, ``banner``. A new ``slug`` is rejected if another
+        brand already uses it.
+
+        Args:
+            actor: The :class:`CustomUser` performing the action.
+            brand: The :class:`Brand` instance to update.
+            data: Mapping of field names to new values.
+            request: Optional request object forwarded to the audit
+                logger.
+
+        Returns:
+            The updated :class:`Brand` instance.
+
+        Raises:
+            BrandAdminServiceError: If the new ``slug`` is already in
+                use by another brand (``code='slug_taken'``).
+        """
         editable = {
             "name", "slug", "description", "website",
             "is_featured", "is_active", "display_order",
@@ -215,6 +329,22 @@ class BrandAdminService:
     @staticmethod
     @transaction.atomic
     def soft_delete(*, actor, brand: Brand, request=None) -> None:
+        """Soft-delete a :class:`Brand` and audit the action.
+
+        Refuses when products still reference the brand. A missing
+        products app (e.g. before migrations) is silently tolerated.
+
+        Args:
+            actor: The :class:`CustomUser` performing the action.
+            brand: The :class:`Brand` instance to delete.
+            request: Optional request object forwarded to the audit
+                logger.
+
+        Raises:
+            BrandAdminServiceError: If any products still reference
+                this brand (``code='has_products'``,
+                ``http_status=400``).
+        """
         try:
             from apps.products.models import Product
             if Product.all_objects.filter(brand=brand).exists():
@@ -233,6 +363,20 @@ class BrandAdminService:
     @staticmethod
     @transaction.atomic
     def restore(*, actor, brand: Brand, request=None) -> Brand:
+        """Restore a previously soft-deleted :class:`Brand`.
+
+        Re-activates the row and audits the action. No-ops when the
+        brand is already active.
+
+        Args:
+            actor: The :class:`CustomUser` performing the action.
+            brand: The :class:`Brand` instance to restore.
+            request: Optional request object forwarded to the audit
+                logger.
+
+        Returns:
+            The restored :class:`Brand` instance.
+        """
         if brand.is_active:
             return brand
         brand.is_active = True
@@ -242,6 +386,14 @@ class BrandAdminService:
 
     @staticmethod
     def _audit(actor, action: str, target, *, request=None):
+        """Best-effort audit log write (see ``AccountService._audit``).
+
+        Args:
+            actor: User performing the action (may be ``None``).
+            action: Stable action code, e.g. ``"brand.create"``.
+            target: Brand instance being acted upon.
+            request: Optional Django request for IP / UA capture.
+        """
         try:
             from apps.common.audit import log_action  # type: ignore
         except Exception:  # pragma: no cover

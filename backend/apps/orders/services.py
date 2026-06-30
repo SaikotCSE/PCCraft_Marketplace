@@ -63,6 +63,17 @@ class AddressService:
 
     @staticmethod
     def list_for_user(user) -> list[ShippingAddress]:
+        """Return all shipping addresses for ``user``.
+
+        Default address first, then by most-recently-updated.
+
+        Args:
+            user: The :class:`CustomUser` whose address book to read.
+
+        Returns:
+            A list of :class:`ShippingAddress` instances ordered by
+            ``-is_default`` and ``-updated_at``.
+        """
         return list(
             ShippingAddress.objects
             .filter(user=user)
@@ -539,6 +550,21 @@ class ReturnService:
     # -- helpers --------------------------------------------------------
     @staticmethod
     def _get_request_for_customer(return_id, user) -> ReturnRequest:
+        """Fetch a return request owned by the requesting customer.
+
+        Args:
+            return_id: PK of the ``ReturnRequest``.
+            user: The authenticated ``CustomUser``.
+
+        Returns:
+            ``ReturnRequest`` with relations ``order_item``, ``order``
+            and ``customer`` pre-loaded.
+
+        Raises:
+            django.core.exceptions.ValidationError: If no return
+                request matching both ``return_id`` and ``user`` is
+                found (e.g. wrong customer or wrong ID).
+        """
         try:
             return ReturnRequest.objects.select_related(
                 "order_item", "order_item__order", "customer",
@@ -548,6 +574,20 @@ class ReturnService:
 
     @staticmethod
     def _get_request_for_vendor(return_id, vendor_profile) -> ReturnRequest:
+        """Fetch a return request whose item is sold by the vendor.
+
+        Args:
+            return_id: PK of the ``ReturnRequest``.
+            vendor_profile: ``VendorProfile`` of the authenticated vendor.
+
+        Returns:
+            ``ReturnRequest`` with ``order_item``, vendor and customer
+            relations pre-loaded.
+
+        Raises:
+            django.core.exceptions.ValidationError: If the return does
+                not exist or belongs to a different vendor.
+        """
         try:
             return ReturnRequest.objects.select_related(
                 "order_item", "order_item__vendor", "customer",
@@ -559,6 +599,19 @@ class ReturnService:
 
     @staticmethod
     def _get_request_for_admin(return_id) -> ReturnRequest:
+        """Fetch any return request by primary key (admin scope).
+
+        Args:
+            return_id: PK of the ``ReturnRequest``.
+
+        Returns:
+            ``ReturnRequest`` with relations ``order_item``, vendor and
+            customer pre-loaded.
+
+        Raises:
+            django.core.exceptions.ValidationError: If no return
+                request matches the given id.
+        """
         try:
             return ReturnRequest.objects.select_related(
                 "order_item", "order_item__vendor", "customer",
@@ -682,6 +735,24 @@ class ReturnService:
     @staticmethod
     @transaction.atomic
     def approve_return(vendor_profile, return_id, *, vendor_notes: str = "") -> ReturnRequest:
+        """Approve a vendor-scoped return request.
+
+        Only valid from :attr:`ReturnStatus.PENDING`. Sets
+        ``approved_at`` and stores ``vendor_notes`` when provided.
+
+        Args:
+            vendor_profile: The :class:`VendorProfile` of the acting
+                vendor; used to scope the lookup.
+            return_id: Primary key of the target :class:`ReturnRequest`.
+            vendor_notes: Optional free-text notes from the vendor.
+
+        Returns:
+            The approved :class:`ReturnRequest` instance (refreshed).
+
+        Raises:
+            ValidationError: If the return is not visible to this
+                vendor, or its current status is not ``PENDING``.
+        """
         ret = ReturnService._get_request_for_vendor(return_id, vendor_profile)
         if ret.status != ReturnStatus.PENDING:
             raise ValidationError(
@@ -709,6 +780,27 @@ class ReturnService:
         reason: str,
         vendor_notes: str = "",
     ) -> ReturnRequest:
+        """Reject a vendor-scoped return request with a written reason.
+
+        Only valid from :attr:`ReturnStatus.PENDING`. The trimmed
+        reason must be at least 5 characters long.
+
+        Args:
+            vendor_profile: The :class:`VendorProfile` of the acting
+                vendor; used to scope the lookup.
+            return_id: Primary key of the target :class:`ReturnRequest`.
+            reason: Free-text rejection reason (min 5 characters after
+                trimming).
+            vendor_notes: Optional free-text notes from the vendor.
+
+        Returns:
+            The rejected :class:`ReturnRequest` instance (refreshed).
+
+        Raises:
+            ValidationError: If the return is not visible to this
+                vendor, its current status is not ``PENDING``, or
+                ``reason`` is shorter than 5 characters.
+        """
         ret = ReturnService._get_request_for_vendor(return_id, vendor_profile)
         if ret.status != ReturnStatus.PENDING:
             raise ValidationError(
@@ -737,6 +829,27 @@ class ReturnService:
     @staticmethod
     @transaction.atomic
     def ship_back(user, return_id, *, tracking_number: str) -> ReturnRequest:
+        """Customer marks the return package as shipped back to the vendor.
+
+        Only valid from :attr:`ReturnStatus.APPROVED`. The trimmed
+        tracking number must be at least 3 characters long.
+
+        Args:
+            user: The :class:`CustomUser` (must be the customer who
+                opened the return).
+            return_id: Primary key of the target :class:`ReturnRequest`.
+            tracking_number: Carrier tracking number for the return
+                shipment (min 3 characters after trimming).
+
+        Returns:
+            The :class:`ReturnRequest` instance with status
+            ``SHIPPED_BACK`` (refreshed).
+
+        Raises:
+            ValidationError: If the return is not visible to this
+                user, its current status is not ``APPROVED``, or the
+                tracking number is too short.
+        """
         ret = ReturnService._get_request_for_customer(return_id, user)
         if ret.status != ReturnStatus.APPROVED:
             raise ValidationError(
@@ -763,6 +876,26 @@ class ReturnService:
     @staticmethod
     @transaction.atomic
     def mark_received(vendor_profile, return_id, *, vendor_notes: str = "") -> ReturnRequest:
+        """Vendor marks the return package as received.
+
+        Only valid from :attr:`ReturnStatus.SHIPPED_BACK`. Stores
+        ``vendor_notes`` when provided.
+
+        Args:
+            vendor_profile: The :class:`VendorProfile` of the acting
+                vendor; used to scope the lookup.
+            return_id: Primary key of the target :class:`ReturnRequest`.
+            vendor_notes: Optional free-text notes from the vendor.
+
+        Returns:
+            The :class:`ReturnRequest` instance with status
+            ``RECEIVED`` (refreshed).
+
+        Raises:
+            ValidationError: If the return is not visible to this
+                vendor, or its current status is not
+                ``SHIPPED_BACK``.
+        """
         ret = ReturnService._get_request_for_vendor(return_id, vendor_profile)
         if ret.status != ReturnStatus.SHIPPED_BACK:
             raise ValidationError(
@@ -784,6 +917,26 @@ class ReturnService:
     @staticmethod
     @transaction.atomic
     def process_refund(admin_user, return_id, *, admin_notes: str = "") -> ReturnRequest:
+        """Admin initiates the refund after the vendor received the item.
+
+        Only valid from :attr:`ReturnStatus.RECEIVED`. Sets
+        ``refund_initiated_at`` and stores ``admin_notes`` when
+        provided.
+
+        Args:
+            admin_user: The :class:`CustomUser` performing the action
+                (must be staff/admin).
+            return_id: Primary key of the target :class:`ReturnRequest`.
+            admin_notes: Optional free-text notes from the admin.
+
+        Returns:
+            The :class:`ReturnRequest` instance with status
+            ``REFUND_INITIATED`` (refreshed).
+
+        Raises:
+            ValidationError: If the return is not found, or its
+                current status is not ``RECEIVED``.
+        """
         ret = ReturnService._get_request_for_admin(return_id)
         if ret.status != ReturnStatus.RECEIVED:
             raise ValidationError(
@@ -808,6 +961,27 @@ class ReturnService:
     @staticmethod
     @transaction.atomic
     def confirm_refund(admin_user, return_id, *, admin_notes: str = "") -> ReturnRequest:
+        """Admin confirms the refund has cleared and closes the return.
+
+        Only valid from :attr:`ReturnStatus.REFUND_INITIATED`. Also
+        flips the parent order's ``payment_status`` to ``REFUNDED`` and
+        ``status`` to ``RETURNED`` so the order surface reflects the
+        refund in the buyer's history.
+
+        Args:
+            admin_user: The :class:`CustomUser` performing the action
+                (must be staff/admin).
+            return_id: Primary key of the target :class:`ReturnRequest`.
+            admin_notes: Optional free-text notes from the admin.
+
+        Returns:
+            The :class:`ReturnRequest` instance with status
+            ``REFUNDED`` (refreshed).
+
+        Raises:
+            ValidationError: If the return is not found, or its
+                current status is not ``REFUND_INITIATED``.
+        """
         ret = ReturnService._get_request_for_admin(return_id)
         if ret.status != ReturnStatus.REFUND_INITIATED:
             raise ValidationError(
@@ -842,6 +1016,16 @@ class ReturnService:
     # -- read-side helpers ---------------------------------------------
     @staticmethod
     def list_for_customer(user):
+        """Return a queryset of :class:`ReturnRequest` rows opened by ``user``.
+
+        Args:
+            user: The :class:`CustomUser` whose returns to list.
+
+        Returns:
+            A queryset of :class:`ReturnRequest` rows ordered by
+            ``-created_at`` with the order item, vendor, and evidence
+            related objects pre-fetched.
+        """
         return (
             ReturnRequest.objects
             .filter(customer=user)
@@ -855,6 +1039,17 @@ class ReturnService:
 
     @staticmethod
     def list_for_vendor(vendor_profile, status: str | None = None):
+        """Return a queryset of :class:`ReturnRequest` rows for a vendor.
+
+        Args:
+            vendor_profile: The :class:`VendorProfile` whose returns
+                to list.
+            status: Optional :class:`ReturnStatus` value to filter by.
+
+        Returns:
+            A queryset of :class:`ReturnRequest` rows ordered by
+            ``-created_at``.
+        """
         qs = (
             ReturnRequest.objects
             .filter(order_item__vendor=vendor_profile)
@@ -871,6 +1066,15 @@ class ReturnService:
 
     @staticmethod
     def list_for_admin(status: str | None = None):
+        """Return a queryset of :class:`ReturnRequest` rows for the admin console.
+
+        Args:
+            status: Optional :class:`ReturnStatus` value to filter by.
+
+        Returns:
+            A queryset of :class:`ReturnRequest` rows ordered by
+            ``-created_at``.
+        """
         qs = (
             ReturnRequest.objects
             .select_related(
@@ -1046,6 +1250,21 @@ class ReturnAdminService:
 
     @staticmethod
     def _get(return_id) -> ReturnRequest:
+        """Fetch a return request including soft-deleted rows.
+
+        Admin helper — uses ``all_objects`` so a previously soft-deleted
+        request can still be inspected for moderation history.
+
+        Args:
+            return_id: PK of the ``ReturnRequest``.
+
+        Returns:
+            ``ReturnRequest`` with all relevant relations pre-loaded.
+
+        Raises:
+            ReturnAdminServiceError: With ``code="not_found"`` if no
+                return exists for ``return_id``.
+        """
         try:
             return (
                 ReturnRequest.all_objects
@@ -1066,6 +1285,29 @@ class ReturnAdminService:
     @staticmethod
     @transaction.atomic
     def process_refund(*, actor, return_id, admin_notes: str = "") -> ReturnRequest:
+        """Admin override: initiate a refund for a vendor-side return.
+
+        Valid from :attr:`ReturnStatus.RECEIVED` (transitions to
+        :attr:`ReturnStatus.REFUND_INITIATED`) or idempotent when the
+        return is already in :attr:`ReturnStatus.REFUND_INITIATED`.
+
+        Args:
+            actor: The :class:`CustomUser` performing the action
+                (must be admin).
+            return_id: Primary key of the target :class:`ReturnRequest`.
+            admin_notes: Optional free-text notes from the admin.
+
+        Returns:
+            The :class:`ReturnRequest` instance with status
+            ``REFUND_INITIATED`` (refreshed).
+
+        Raises:
+            ReturnAdminServiceError: If the return is not found
+                (``code='not_found'``, ``http_status=404``), or its
+                current status is neither ``RECEIVED`` nor
+                ``REFUND_INITIATED`` (``code='invalid_status'``,
+                ``http_status=400``).
+        """
         ret = ReturnAdminService._get(return_id)
         if ret.status not in {ReturnStatus.RECEIVED, ReturnStatus.REFUND_INITIATED}:
             raise ReturnAdminServiceError(
@@ -1091,6 +1333,26 @@ class ReturnAdminService:
     @staticmethod
     @transaction.atomic
     def confirm_refund(*, actor, return_id, admin_notes: str = "") -> ReturnRequest:
+        """Admin override: confirm a refund has cleared.
+
+        Only valid from :attr:`ReturnStatus.REFUND_INITIATED`.
+
+        Args:
+            actor: The :class:`CustomUser` performing the action
+                (must be admin).
+            return_id: Primary key of the target :class:`ReturnRequest`.
+            admin_notes: Optional free-text notes from the admin.
+
+        Returns:
+            The :class:`ReturnRequest` instance with status
+            ``REFUNDED`` (refreshed).
+
+        Raises:
+            ReturnAdminServiceError: If the return is not found
+                (``code='not_found'``, ``http_status=404``), or its
+                current status is not ``REFUND_INITIATED``
+                (``code='invalid_status'``, ``http_status=400``).
+        """
         ret = ReturnAdminService._get(return_id)
         if ret.status != ReturnStatus.REFUND_INITIATED:
             raise ReturnAdminServiceError(

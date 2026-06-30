@@ -66,16 +66,19 @@ logger = logging.getLogger(__name__)
 # Helpers
 # ---------------------------------------------------------------------------
 def _to_error_response(exc: ReviewServiceError) -> Response:
-    return Response(
-        {
-            "success": False,
-            "error": {
-                "code": exc.code,
-                "message": exc.message,
-                "fields": exc.fields,
-            },
-        },
+    """Translate a :class:`ReviewServiceError` into our envelope.
+
+    Keeps the envelope shape (``success``/``data``/``meta``/``error``)
+    consistent with the rest of the API. Field-level validation errors
+    are surfaced under ``error.fields``.
+    """
+    return api_response(
         status=exc.status,
+        error={
+            "code": exc.code,
+            "message": exc.message,
+            "fields": exc.fields or {},
+        },
     )
 
 
@@ -148,11 +151,12 @@ class ProductReviewViewSet(viewsets.GenericViewSet):
             )
         except ReviewServiceError as exc:
             return _to_error_response(exc)
-        return Response(
-            ReviewListSerializer(
+        return api_response(
+            data=ReviewListSerializer(
                 review, context=self.get_serializer_context()
             ).data,
             status=drf_status.HTTP_201_CREATED,
+            message="Review submitted.",
         )
 
     # ------------------------------------------------------------------

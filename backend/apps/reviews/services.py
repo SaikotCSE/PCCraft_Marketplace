@@ -183,6 +183,22 @@ class ReviewService:
 
     @classmethod
     def get_product_or_404(cls, slug: str) -> Product:
+        """Resolve ``slug`` to an active :class:`Product`.
+
+        Used by the public review endpoints, which only operate on
+        products that are visible to customers.
+
+        Args:
+            slug: URL slug of the product.
+
+        Returns:
+            The matching :class:`Product` with ``vendor``, ``brand``
+            and ``category`` eagerly loaded.
+
+        Raises:
+            ReviewServiceError: ``not_found`` (HTTP 404) when no
+                active product has that slug.
+        """
         try:
             return (
                 Product.objects.select_related("vendor", "brand", "category")
@@ -274,6 +290,31 @@ class ReviewService:
         data: dict[str, Any],
         images: Iterable | None = None,
     ) -> Review:
+        """Edit the title / body of ``review`` and optionally replace its images.
+
+        Per spec the ``rating`` field is immutable after creation;
+        any attempt to change it is rejected. ``images=None`` leaves
+        the existing images untouched; an explicit iterable (including
+        an empty one) replaces the current set.
+
+        Args:
+            user: The viewing user. Must own the review.
+            review: The review to mutate.
+            data: Mapping optionally containing ``title`` and
+                ``body``. ``rating`` may be passed but is ignored
+                unless unchanged.
+            images: Optional iterable of image uploads. When
+                provided, all existing images are deleted and
+                ``images`` becomes the new set.
+
+        Returns:
+            The persisted :class:`Review`.
+
+        Raises:
+            ReviewServiceError: ``forbidden`` (HTTP 403) when the
+                user is not the author, ``rating_immutable`` (HTTP
+                400) when ``rating`` differs from the stored value.
+        """
         if review.user_id != user.pk:
             raise ReviewServiceError(
                 "forbidden",
@@ -309,6 +350,21 @@ class ReviewService:
     @classmethod
     @transaction.atomic
     def delete_review(cls, *, user, review: Review) -> None:
+        """Hard-delete ``review`` and refresh its product aggregates.
+
+        Spec calls for a true cascade delete (not soft) so the
+        affected :class:`ReviewImage` and :class:`ReviewHelpful`
+        rows are removed via FK cascades. Denormalised ratings
+        on the product and vendor are recomputed afterwards.
+
+        Args:
+            user: The viewing user. Must own the review.
+            review: The review to remove.
+
+        Raises:
+            ReviewServiceError: ``forbidden`` (HTTP 403) when ``user``
+                is not the author of ``review``.
+        """
         if review.user_id != user.pk:
             raise ReviewServiceError(
                 "forbidden",
@@ -386,6 +442,28 @@ class ReviewService:
         review_id: Any,
         reply_text: str,
     ) -> Review:
+        """Attach or update the vendor's reply on a single review.
+
+        The reply text is bounded between 10 and 1000 characters.
+        When the vendor has already replied, the existing text is
+        edited in place and ``vendor_reply_edited_at`` is bumped;
+        the first reply sets ``vendor_replied_at`` instead.
+
+        Args:
+            vendor: The replying vendor. Must own the reviewed product.
+            review_id: Primary key of the :class:`Review`.
+            reply_text: Free-form reply text (will be stripped).
+
+        Returns:
+            The updated :class:`Review`.
+
+        Raises:
+            ReviewServiceError: ``not_found`` (HTTP 404) when no
+                review matches ``review_id``; ``forbidden`` (HTTP 403)
+                when ``vendor`` does not own the reviewed product;
+                ``validation_error`` (HTTP 400) when ``reply_text`` is
+                shorter than 10 or longer than 1000 characters.
+        """
         try:
             review = (
                 Review.objects
@@ -446,6 +524,21 @@ class ReviewService:
     @classmethod
     @transaction.atomic
     def hide_review(cls, *, review_id: Any) -> Review:
+        """Mark a review as admin-hidden and recompute product aggregates.
+
+        Hidden reviews are excluded from the public average rating
+        and review count (see :func:`_recompute_product_aggregates`).
+
+        Args:
+            review_id: Primary key of the review.
+
+        Returns:
+            The updated :class:`Review` (unchanged if already hidden).
+
+        Raises:
+            ReviewServiceError: ``not_found`` (HTTP 404) when no
+                review matches ``review_id``.
+        """
         try:
             review = Review.objects.select_for_update().get(pk=review_id)
         except Review.DoesNotExist:
@@ -460,6 +553,22 @@ class ReviewService:
     @classmethod
     @transaction.atomic
     def restore_review(cls, *, review_id: Any) -> Review:
+        """Un-hide a previously hidden review and recompute aggregates.
+
+        Restoring a review re-includes it in the public average and
+        review count displayed on the product detail page.
+
+        Args:
+            review_id: Primary key of the review.
+
+        Returns:
+            The updated :class:`Review` (unchanged if not currently
+            hidden).
+
+        Raises:
+            ReviewServiceError: ``not_found`` (HTTP 404) when no
+                review matches ``review_id``.
+        """
         try:
             review = Review.objects.select_for_update().get(pk=review_id)
         except Review.DoesNotExist:
@@ -474,6 +583,22 @@ class ReviewService:
     @classmethod
     @transaction.atomic
     def remove_vendor_reply(cls, *, review_id: Any) -> Review:
+        """Strip the vendor reply (and timestamps) from a review.
+
+        Used by both vendors (when they want to withdraw their reply)
+        and admins (moderation). No-op if no reply is currently set.
+
+        Args:
+            review_id: Primary key of the review.
+
+        Returns:
+            The updated :class:`Review` (unchanged if no reply was
+            attached).
+
+        Raises:
+            ReviewServiceError: ``not_found`` (HTTP 404) when no
+                review matches ``review_id``.
+        """
         try:
             review = Review.objects.select_for_update().get(pk=review_id)
         except Review.DoesNotExist:
@@ -502,6 +627,21 @@ class ReviewService:
         ordering: str | None = None,
         rating: int | None = None,
     ):
+        """Build a queryset of public reviews for ``product``.
+
+        Hidden reviews are excluded so admin-moderated rows stay
+        out of the public list.
+
+        Args:
+            product: The product whose reviews are listed.
+            ordering: Token from the spec (e.g. ``newest``,
+                ``helpful``); defaults to ``-created_at``.
+            rating: Optional star-rating filter (1-5).
+
+        Returns:
+            An ordered, filtered queryset of :class:`Review` rows
+            with ``user`` and ``images`` preloaded.
+        """
         qs = (
             Review.objects
             .filter(product=product, is_hidden=False)
@@ -521,6 +661,23 @@ class ReviewService:
         rating: int | None = None,
         replied: bool | None = None,
     ):
+        """Build a queryset of reviews for products owned by ``vendor``.
+
+        Includes both hidden and visible rows; vendor dashboards need
+        to see moderation state. The optional ``replied`` filter
+        narrows the list to reviews with or without a vendor reply.
+
+        Args:
+            vendor: Vendor whose reviews are listed.
+            ordering: Token from the spec; defaults to ``-created_at``.
+            rating: Optional star-rating filter.
+            replied: ``True`` for reviews with a vendor reply,
+                ``False`` for those without, ``None`` for both.
+
+        Returns:
+            An ordered, filtered queryset of :class:`Review` rows
+            with ``user`` and ``product`` eagerly loaded.
+        """
         qs = (
             Review.objects
             .filter(product__vendor=vendor)
@@ -546,6 +703,26 @@ class ReviewService:
         vendor_id: Any | None = None,
         search: str | None = None,
     ):
+        """Build an admin-facing queryset with rich filtering.
+
+        Includes hidden and visible rows so moderation UI can pivot
+        by status. ``search`` matches the review title / body /
+        author name / email / product name so moderators can pivot
+        by user quickly.
+
+        Args:
+            ordering: Token from the spec; defaults to ``-created_at``.
+            is_hidden: When set, filters to hidden or visible rows.
+            rating: Optional star-rating filter.
+            product_id: Optional product primary key.
+            vendor_id: Optional vendor primary key.
+            search: Free-text filter applied with ``icontains``.
+
+        Returns:
+            An ordered, filtered queryset of :class:`Review` rows
+            with related ``user``, ``product`` and ``vendor``
+            eagerly loaded.
+        """
         qs = (
             Review.objects
             .filter()
@@ -575,6 +752,24 @@ class ReviewService:
     # ------------------------------------------------------------------
     @classmethod
     def _set_images(cls, review: Review, images: Iterable | None) -> list[ReviewImage]:
+        """Replace-or-create the gallery for a review.
+
+        Skips falsy entries so the validator can pass optional
+        attachments through untouched, enforces ``MAX_REVIEW_IMAGES``,
+        and creates ``ReviewImage`` rows in the order provided.
+
+        Args:
+            review: Parent ``Review`` instance.
+            images: Optional iterable of upload-file objects.
+
+        Returns:
+            List of newly created ``ReviewImage`` rows (empty if
+            ``images`` was falsy).
+
+        Raises:
+            ReviewServiceError: ``"too_many_images"`` when the
+                resulting count would exceed ``MAX_REVIEW_IMAGES``.
+        """
         if not images:
             return []
         files = [f for f in images if f]

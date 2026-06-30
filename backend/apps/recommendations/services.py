@@ -146,6 +146,18 @@ class SearchLogService:
 
     @staticmethod
     def normalize(raw: str | None) -> str:
+        """Return a canonical form of ``raw`` for analytics + dedup keys.
+
+        Strips surrounding whitespace, lower-cases the input and
+        collapses internal whitespace runs to a single space. The
+        result is empty when ``raw`` is falsy.
+
+        Args:
+            raw: Free-form query string captured from the search box.
+
+        Returns:
+            The normalized query, or ``""`` when ``raw`` is empty.
+        """
         if not raw:
             return ""
         return " ".join(str(raw).strip().lower().split())
