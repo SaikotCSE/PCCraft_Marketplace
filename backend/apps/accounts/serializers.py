@@ -107,7 +107,14 @@ class LoginSerializer(TokenObtainPairSerializer):
         )
         if user is None or not user.is_active:
             self.fail("no_active_account")
-        if not getattr(user, "is_verified", False):
+        # Admin / superuser accounts never go through the OTP sign-up
+        # flow (``manage.py createsuperuser`` and the Django admin do
+        # not issue a code), so exempt them from the is_verified gate.
+        is_admin_user = (
+            getattr(user, "is_superuser", False)
+            or getattr(user, "role", None) == UserRole.ADMIN
+        )
+        if not is_admin_user and not getattr(user, "is_verified", False):
             self.fail("email_not_verified")
         return user
 

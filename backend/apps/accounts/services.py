@@ -539,7 +539,16 @@ class AuthService:
             raise AuthServiceError("Invalid email or password.", code="unauthenticated")
         if not user.is_active:
             raise AuthServiceError("This account is disabled.", code="account_disabled")
-        if not user.is_verified:
+        # Admin / superuser accounts never go through the OTP sign-up
+        # flow (``manage.py createsuperuser`` and the Django admin do
+        # not issue a code), so exempt them from the is_verified gate.
+        # For customers and vendors, ``is_verified`` flips to ``True``
+        # only when the signup OTP is consumed.
+        is_admin_user = (
+            getattr(user, "is_superuser", False)
+            or user.role == UserRole.ADMIN
+        )
+        if not is_admin_user and not user.is_verified:
             # Module 1 hardening: a customer/vendor who has not yet
             # consumed their signup OTP is **never** allowed to sign in,
             # even with the correct password. They must verify first;
