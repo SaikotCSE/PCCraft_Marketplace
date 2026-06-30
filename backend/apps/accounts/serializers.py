@@ -83,11 +83,20 @@ class LoginSerializer(TokenObtainPairSerializer):
     default_error_messages = {
         **TokenObtainPairSerializer.default_error_messages,
         "role_mismatch": "This account does not have the selected role.",
+        "email_not_verified": (
+            "Please verify your email before signing in. Check your inbox "
+            "for the 6-digit code, or re-register to receive a new one."
+        ),
     }
 
     def _authenticate_user(self, username, password):
         """Override the parent's USERNAME_FIELD-based authenticate so we
         accept email. Returns the user or raises ``AuthenticationFailed``.
+
+        Module 1 hardening: an account whose ``is_verified`` is still
+        ``False`` is treated as "email_not_verified", regardless of
+        whether the password matches. The frontend must route the user
+        to the OTP screen instead of letting them into the dashboard.
         """
         if not username or not password:
             self.fail("no_active_account")
@@ -98,6 +107,8 @@ class LoginSerializer(TokenObtainPairSerializer):
         )
         if user is None or not user.is_active:
             self.fail("no_active_account")
+        if not getattr(user, "is_verified", False):
+            self.fail("email_not_verified")
         return user
 
     def validate(self, attrs):

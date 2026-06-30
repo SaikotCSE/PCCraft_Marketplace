@@ -89,7 +89,7 @@ def _service_error_to_response(exc: AuthServiceError) -> Response:
         status.HTTP_401_UNAUTHORIZED
         if exc.code in {"unauthenticated", "invalid_token", "missing_token", "account_disabled"}
         else status.HTTP_403_FORBIDDEN
-        if exc.code == "role_mismatch"
+        if exc.code in {"role_mismatch", "email_not_verified"}
         else status.HTTP_400_BAD_REQUEST
     )
     return _bad_request(exc.code, exc.message, fields=exc.fields or None, status_code=status_code)
@@ -391,6 +391,35 @@ class LoginView(APIView):
                 return _bad_request(
                     "role_mismatch", msg,
                     fields=serializer.errors,
+                    status_code=status.HTTP_403_FORBIDDEN,
+                )
+            if first_code == "email_not_verified":
+                # Module 1 hardening -- account exists & password is
+                # correct, but the user has not yet consumed the OTP
+                # emailed at signup. Frontend must route to the OTP
+                # step (and offer "resend code" / "use the same email
+                # to resend"). Re-registering with the same email is
+                # allowed -- the service layer upserts in place and
+                # issues a fresh code.
+                user_obj = None
+                if email_raw:
+                    try:
+                        user_obj = User.all_objects.get(email__iexact=email_raw)
+                    except User.DoesNotExist:
+                        user_obj = None
+                SecurityService.record_login_attempt(
+                    email=email_raw,
+                    request=request,
+                    success=False,
+                    failure_reason="email_not_verified",
+                    user=user_obj,
+                )
+                return _bad_request(
+                    "email_not_verified",
+                    str(non_field[0]) if non_field else (
+                        "Please verify your email before signing in."
+                    ),
+                    fields={"email": str(non_field[0])} if non_field else None,
                     status_code=status.HTTP_403_FORBIDDEN,
                 )
             if first_code == "no_active_account" or non_field:
